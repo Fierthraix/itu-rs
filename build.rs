@@ -12,7 +12,7 @@ const DEFAULT_DATA_URL: &str =
     "https://github.com/Fierthraix/itu-rs/releases/download/itu-rs-data-v1/itu-rs-data-v1.zip";
 #[cfg(feature = "data")]
 const DEFAULT_DATA_SHA256: &str =
-    "ccc5c4f795818f566d6946fb019cef92f0031f2084ca4c47e2817ccb7409acb5";
+    "20436b31774260950032328e18630dbfe3d13a2d679fd1de5edad54bf153a294";
 
 fn main() {
     println!("cargo:rerun-if-env-changed=ITU_RS_DATA_ARCHIVE");
