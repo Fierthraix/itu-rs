@@ -97,20 +97,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 | python-itu-r function or feature | Rust support | Status |
 |---|---:|---|
-| `itur.atmospheric_attenuation_slant_path` | Yes | Public API |
-| Batched slant-path attenuation over elevation angles | Yes | Public API |
-| Gas-only default slant-path attenuation helper | Yes | Public API |
-| P.676 gaseous attenuation, exact and approximate paths | Yes | Internal/public through slant path |
-| P.618 rain attenuation contribution | Yes | Internal/public through contributions |
-| P.618 scintillation attenuation contribution | Yes | Internal/public through contributions |
-| P.840 cloud attenuation contribution | Yes | Internal/public through contributions |
-| P.1511 topographic altitude lookup | Yes | Internal data support |
-| P.1510 surface mean temperature lookup | Yes | Internal data support |
-| P.836 water vapour density and total content lookup | Yes | Internal data support |
-| P.837 rainfall rate lookup | Yes | Internal data support |
-| P.839 rain height lookup | Yes | Internal data support |
-| P.453 wet-term radio refractivity lookup | Yes | Internal data support |
-| Full `python-itu-r` package API | No | Out of scope for this crate |
+| `itur.atmospheric_attenuation_slant_path` | ✅ | Public API |
+| Batched slant-path attenuation over elevation angles | ✅ | Public API |
+| Gas-only default slant-path attenuation helper | ✅ | Public API |
+| P.676 gaseous attenuation, exact and approximate paths | ✅ | Internal/public through slant path |
+| P.618 rain attenuation contribution | ✅ | Internal/public through contributions |
+| P.618 scintillation attenuation contribution | ✅ | Internal/public through contributions |
+| P.840 cloud attenuation contribution | ✅ | Internal/public through contributions |
+| P.1511 topographic altitude lookup | ✅ | Internal data support |
+| P.1510 surface mean temperature lookup | ✅ | Internal data support |
+| P.836 water vapour density and total content lookup | ✅ | Internal data support |
+| P.837 rainfall rate lookup | ✅ | Internal data support |
+| P.839 rain height lookup | ✅ | Internal data support |
+| P.453 wet-term radio refractivity lookup | ✅ | Internal data support |
+| Full `python-itu-r` package API | ❌ | Out of scope for this crate |
+
+## Long-Term Goals
+
+The long-term goal is full ITU-R recommendation coverage, with Rust
+implementations of the propagation models exposed through a stable native API.
+
+Another goal is Python exposure as an installable Python package, likely through
+PyO3 or a similar binding layer. That package should make it possible to compare
+the Rust implementation directly against Python workflows and measure whether
+the Rust core materially speeds up common `python-itu-r` use cases.
 
 ## Benchmarks
 
