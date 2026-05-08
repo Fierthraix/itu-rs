@@ -1,7 +1,7 @@
 [package]
 name = "itu-rs"
 version = "1.0.0"
-edition = "2021"
+edition = "2024"
 description = "Rust implementation of selected ITU-R P-series atmospheric propagation models"
 readme = "README.md"
 documentation = "https://docs.rs/itu-rs"
@@ -23,11 +23,11 @@ include = [
 name = "itu_rs"
 
 [dependencies]
-ndarray = "0.16.0"
-ndarray-npy = "0.9.1"
+ndarray = "0.17.2"
+ndarray-npy = "0.10.0"
 
 [dev-dependencies]
-criterion = "0.5"
+criterion = "0.8.2"
 
 [[bench]]
 name = "slant_path"
