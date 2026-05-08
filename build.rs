@@ -8,9 +8,11 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 #[cfg(feature = "data")]
-const DEFAULT_DATA_URL: &str = "https://github.com/Fierthraix/itu-rs/archive/refs/heads/master.zip";
+const DEFAULT_DATA_URL: &str =
+    "https://github.com/Fierthraix/itu-rs/releases/download/itu-rs-data-v1/itu-rs-data-v1.zip";
 #[cfg(feature = "data")]
-const DEFAULT_DATA_SHA256: &str = "";
+const DEFAULT_DATA_SHA256: &str =
+    "ccc5c4f795818f566d6946fb019cef92f0031f2084ca4c47e2817ccb7409acb5";
 
 fn main() {
     println!("cargo:rerun-if-env-changed=ITU_RS_DATA_ARCHIVE");

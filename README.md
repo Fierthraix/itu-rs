@@ -32,9 +32,10 @@ itu-rs = { version = "1", features = ["data"] }
 With `features = ["data"]`, the build script first uses local `data/` files when
 they are present. Otherwise it downloads a source archive, extracts `data/**`,
 and embeds those bytes into the compiled crate. The default download URL points
-at this repository's GitHub archive. Override it with `ITU_RS_DATA_URL`, use a
-local archive with `ITU_RS_DATA_ARCHIVE`, set `ITU_RS_DATA_CACHE` for a persistent
-download cache, and set `ITU_RS_DATA_SHA256` to require checksum verification.
+at the `itu-rs-data-v1.zip` GitHub Release asset and verifies its pinned SHA256.
+Override it with `ITU_RS_DATA_URL`, use a local archive with
+`ITU_RS_DATA_ARCHIVE`, set `ITU_RS_DATA_CACHE` for a persistent download cache,
+and set `ITU_RS_DATA_SHA256` to require a different checksum.
 
 The feature is intentionally opt-in because it makes builds network-dependent
 when local data is unavailable and increases the final binary size by roughly the
