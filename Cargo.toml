@@ -1,6 +1,6 @@
 [package]
 name = "itu-rs"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 description = "Rust implementation of selected ITU-R P-series atmospheric propagation models"
 readme = "README.md"

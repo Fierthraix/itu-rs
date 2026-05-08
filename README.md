@@ -110,7 +110,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 | P.837 rainfall rate lookup | Yes | Internal data support |
 | P.839 rain height lookup | Yes | Internal data support |
 | P.453 wet-term radio refractivity lookup | Yes | Internal data support |
-| Full `python-itu-r` package API | No | Out of scope for `0.1.0` |
+| Full `python-itu-r` package API | No | Out of scope for this crate |
 
 ## Benchmarks
 
