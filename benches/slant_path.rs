@@ -1,7 +1,8 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use itu_rs::{
-    atmospheric_attenuation_slant_path, atmospheric_attenuation_slant_path_many, SlantPathOptions,
+    SlantPathOptions, atmospheric_attenuation_slant_path, atmospheric_attenuation_slant_path_many,
 };
+use std::hint::black_box;
 
 fn bench_default_many(c: &mut Criterion) {
     let elevations: Vec<f64> = (0..169)

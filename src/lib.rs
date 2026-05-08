@@ -16,7 +16,8 @@
 //!
 //! ```
 //! # fn data_available() -> bool {
-//! #     std::env::var_os("ITU_RS_DATA_DIR").is_some()
+//! #     cfg!(feature = "data")
+//! #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
 //! #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
 //! #             .join("data/1511/v2_lat.npz")
 //! #             .exists()
@@ -48,11 +49,23 @@
 
 use ndarray::{Array2, Axis};
 use ndarray_npy::NpzReader;
+use std::borrow::Cow;
 use std::f64::consts::FRAC_PI_2;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Cursor};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
+
+#[cfg(feature = "data")]
+mod bundled_data {
+    include!(concat!(env!("OUT_DIR"), "/bundled_data.rs"));
+}
+
+#[cfg(not(feature = "data"))]
+mod bundled_data {
+    pub fn get(_rel_path: &str) -> Option<&'static [u8]> {
+        None
+    }
+}
 
 /// Error returned by ITU-R model loading, validation, and calculation routines.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1349,34 +1362,61 @@ fn data_root() -> PathBuf {
         .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("data"))
 }
 
-fn load_npz_array2(rel_path: &str) -> Result<Array2<f64>, String> {
+struct DataBlob {
+    label: String,
+    bytes: Cow<'static, [u8]>,
+}
+
+fn load_data(rel_path: &str) -> Result<DataBlob, String> {
+    if let Some(root) = std::env::var_os("ITU_RS_DATA_DIR") {
+        let full_path = PathBuf::from(root).join(rel_path);
+        let bytes = std::fs::read(&full_path)
+            .map_err(|err| format!("failed opening {}: {err}", full_path.display()))?;
+        return Ok(DataBlob {
+            label: full_path.display().to_string(),
+            bytes: Cow::Owned(bytes),
+        });
+    }
+
     let full_path = data_root().join(rel_path);
-    let file = File::open(&full_path)
-        .map_err(|err| format!("failed opening {}: {err}", full_path.display()))?;
-    let mut npz = NpzReader::new(BufReader::new(file))
-        .map_err(|err| format!("failed reading npz {}: {err}", full_path.display()))?;
-    npz.by_name("arr_0.npy").map_err(|err| {
-        format!(
-            "failed loading arr_0.npy from {}: {err}",
-            full_path.display()
-        )
-    })
+    match std::fs::read(&full_path) {
+        Ok(bytes) => {
+            return Ok(DataBlob {
+                label: full_path.display().to_string(),
+                bytes: Cow::Owned(bytes),
+            });
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(format!("failed opening {}: {err}", full_path.display())),
+    }
+
+    if let Some(bytes) = bundled_data::get(rel_path) {
+        return Ok(DataBlob {
+            label: format!("bundled data/{rel_path}"),
+            bytes: Cow::Borrowed(bytes),
+        });
+    }
+
+    Err(format!(
+        "failed locating data/{rel_path}; set ITU_RS_DATA_DIR to a python-itu-r itur/data directory or enable the itu-rs `data` feature"
+    ))
+}
+
+fn load_npz_array2(rel_path: &str) -> Result<Array2<f64>, String> {
+    let data = load_data(rel_path)?;
+    let mut npz = NpzReader::new(Cursor::new(data.bytes.as_ref()))
+        .map_err(|err| format!("failed reading npz {}: {err}", data.label))?;
+    npz.by_name("arr_0.npy")
+        .map_err(|err| format!("failed loading arr_0.npy from {}: {err}", data.label))
 }
 
 fn load_spectral_lines(rel_path: &str) -> Result<Vec<SpectralLine>, String> {
-    let full_path = data_root().join(rel_path);
-    let file = File::open(&full_path)
-        .map_err(|err| format!("failed opening {}: {err}", full_path.display()))?;
-    let reader = BufReader::new(file);
+    let data = load_data(rel_path)?;
+    let reader = BufReader::new(Cursor::new(data.bytes.as_ref()));
     let mut out = Vec::new();
     for (idx, line) in reader.lines().enumerate() {
-        let line = line.map_err(|err| {
-            format!(
-                "failed reading {} line {}: {err}",
-                full_path.display(),
-                idx + 1
-            )
-        })?;
+        let line =
+            line.map_err(|err| format!("failed reading {} line {}: {err}", data.label, idx + 1))?;
         if idx == 0 || line.trim().is_empty() {
             continue;
         }
@@ -1384,17 +1424,11 @@ fn load_spectral_lines(rel_path: &str) -> Result<Vec<SpectralLine>, String> {
             .split(',')
             .map(|part| part.trim().parse::<f64>())
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|err| {
-                format!(
-                    "failed parsing {} line {}: {err}",
-                    full_path.display(),
-                    idx + 1
-                )
-            })?;
+            .map_err(|err| format!("failed parsing {} line {}: {err}", data.label, idx + 1))?;
         if cols.len() != 7 {
             return Err(format!(
                 "unexpected column count in {} line {}",
-                full_path.display(),
+                data.label,
                 idx + 1
             ));
         }
@@ -1412,19 +1446,12 @@ fn load_spectral_lines(rel_path: &str) -> Result<Vec<SpectralLine>, String> {
 }
 
 fn load_h0_coefficients(rel_path: &str) -> Result<Vec<H0Coefficients>, String> {
-    let full_path = data_root().join(rel_path);
-    let file = File::open(&full_path)
-        .map_err(|err| format!("failed opening {}: {err}", full_path.display()))?;
-    let reader = BufReader::new(file);
+    let data = load_data(rel_path)?;
+    let reader = BufReader::new(Cursor::new(data.bytes.as_ref()));
     let mut out = Vec::new();
     for (idx, line) in reader.lines().enumerate() {
-        let line = line.map_err(|err| {
-            format!(
-                "failed reading {} line {}: {err}",
-                full_path.display(),
-                idx + 1
-            )
-        })?;
+        let line =
+            line.map_err(|err| format!("failed reading {} line {}: {err}", data.label, idx + 1))?;
         if idx == 0 || line.trim().is_empty() {
             continue;
         }
@@ -1432,17 +1459,11 @@ fn load_h0_coefficients(rel_path: &str) -> Result<Vec<H0Coefficients>, String> {
             .split(',')
             .map(|part| part.trim().parse::<f64>())
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|err| {
-                format!(
-                    "failed parsing {} line {}: {err}",
-                    full_path.display(),
-                    idx + 1
-                )
-            })?;
+            .map_err(|err| format!("failed parsing {} line {}: {err}", data.label, idx + 1))?;
         if cols.len() != 5 {
             return Err(format!(
                 "unexpected column count in {} line {}",
-                full_path.display(),
+                data.label,
                 idx + 1
             ));
         }
@@ -1678,40 +1699,40 @@ fn validate_options(options: SlantPathOptions) -> Result<(), String> {
     if !(0.0..=90.0).contains(&options.tau_deg) {
         return Err("tau_deg must be in [0, 90]".to_string());
     }
-    if let Some(rho_gm3) = options.rho_gm3 {
-        if rho_gm3 < 0.0 {
-            return Err("rho_gm3 must be >= 0".to_string());
-        }
+    if let Some(rho_gm3) = options.rho_gm3
+        && rho_gm3 < 0.0
+    {
+        return Err("rho_gm3 must be >= 0".to_string());
     }
-    if let Some(r001_mmh) = options.r001_mmh {
-        if r001_mmh < 0.0 {
-            return Err("r001_mmh must be >= 0".to_string());
-        }
+    if let Some(r001_mmh) = options.r001_mmh
+        && r001_mmh < 0.0
+    {
+        return Err("r001_mmh must be >= 0".to_string());
     }
-    if let Some(t) = options.t {
-        if t <= 0.0 {
-            return Err("t must be > 0".to_string());
-        }
+    if let Some(t) = options.t
+        && t <= 0.0
+    {
+        return Err("t must be > 0".to_string());
     }
-    if let Some(h_percent) = options.h_percent {
-        if !(0.0..=100.0).contains(&h_percent) {
-            return Err("h_percent must be in [0, 100]".to_string());
-        }
+    if let Some(h_percent) = options.h_percent
+        && !(0.0..=100.0).contains(&h_percent)
+    {
+        return Err("h_percent must be in [0, 100]".to_string());
     }
-    if let Some(pressure_hpa) = options.pressure_hpa {
-        if pressure_hpa <= 0.0 {
-            return Err("pressure_hpa must be > 0".to_string());
-        }
+    if let Some(pressure_hpa) = options.pressure_hpa
+        && pressure_hpa <= 0.0
+    {
+        return Err("pressure_hpa must be > 0".to_string());
     }
-    if let Some(l_s_km) = options.l_s_km {
-        if l_s_km <= 0.0 {
-            return Err("l_s_km must be > 0".to_string());
-        }
+    if let Some(l_s_km) = options.l_s_km
+        && l_s_km <= 0.0
+    {
+        return Err("l_s_km must be > 0".to_string());
     }
-    if let Some(v_t_kgm2) = options.v_t_kgm2 {
-        if v_t_kgm2 < 0.0 {
-            return Err("v_t_kgm2 must be >= 0".to_string());
-        }
+    if let Some(v_t_kgm2) = options.v_t_kgm2
+        && v_t_kgm2 < 0.0
+    {
+        return Err("v_t_kgm2 must be >= 0".to_string());
     }
     Ok(())
 }
@@ -1780,7 +1801,8 @@ fn gas_attenuation_default_many_clamped(
 ///
 /// ```
 /// # fn data_available() -> bool {
-/// #     std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
 /// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
 /// #             .join("data/1511/v2_lat.npz")
 /// #             .exists()
@@ -1826,7 +1848,8 @@ pub fn gas_attenuation_default(
 ///
 /// ```
 /// # fn data_available() -> bool {
-/// #     std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
 /// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
 /// #             .join("data/1511/v2_lat.npz")
 /// #             .exists()
@@ -1887,7 +1910,8 @@ pub fn gas_attenuation_default_many_checked(
 ///
 /// ```
 /// # fn data_available() -> bool {
-/// #     std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
 /// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
 /// #             .join("data/1511/v2_lat.npz")
 /// #             .exists()
@@ -1932,7 +1956,8 @@ pub fn atmospheric_attenuation_slant_path(
 ///
 /// ```
 /// # fn data_available() -> bool {
-/// #     std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
 /// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
 /// #             .join("data/1511/v2_lat.npz")
 /// #             .exists()

@@ -1,4 +1,4 @@
-use itu_rs::{atmospheric_attenuation_slant_path, SlantPathOptions};
+use itu_rs::{SlantPathOptions, atmospheric_attenuation_slant_path};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let attenuation = atmospheric_attenuation_slant_path(

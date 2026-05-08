@@ -1,11 +1,12 @@
 use itu_rs::{
-    atmospheric_attenuation_slant_path, atmospheric_attenuation_slant_path_many,
-    gas_attenuation_default, gas_attenuation_default_many_checked, SlantPathOptions,
+    SlantPathOptions, atmospheric_attenuation_slant_path, atmospheric_attenuation_slant_path_many,
+    gas_attenuation_default, gas_attenuation_default_many_checked,
 };
 use std::path::Path;
 
 fn data_available() -> bool {
-    std::env::var_os("ITU_RS_DATA_DIR").is_some()
+    cfg!(feature = "data")
+        || std::env::var_os("ITU_RS_DATA_DIR").is_some()
         || Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("data/1511/v2_lat.npz")
             .exists()

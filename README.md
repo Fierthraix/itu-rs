@@ -21,6 +21,25 @@ from `python-itu-r`:
 $env:ITU_RS_DATA_DIR = "C:\path\to\ITU-Rpy\itur\data"
 ```
 
+Alternatively, enable the opt-in `data` feature to fetch and compile the grid
+files into your build:
+
+```toml
+[dependencies]
+itu-rs = { version = "1", features = ["data"] }
+```
+
+With `features = ["data"]`, the build script first uses local `data/` files when
+they are present. Otherwise it downloads a source archive, extracts `data/**`,
+and embeds those bytes into the compiled crate. The default download URL points
+at this repository's GitHub archive. Override it with `ITU_RS_DATA_URL`, use a
+local archive with `ITU_RS_DATA_ARCHIVE`, set `ITU_RS_DATA_CACHE` for a persistent
+download cache, and set `ITU_RS_DATA_SHA256` to require checksum verification.
+
+The feature is intentionally opt-in because it makes builds network-dependent
+when local data is unavailable and increases the final binary size by roughly the
+compressed grid data size.
+
 ## Example
 
 Compute the full atmospheric attenuation contribution set for one Earth-space
