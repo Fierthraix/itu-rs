@@ -1,0 +1,34 @@
+[package]
+name = "itu-rs"
+version = "0.1.0"
+edition = "2021"
+description = "Rust implementation of selected ITU-R P-series atmospheric propagation models"
+readme = "README.md"
+documentation = "https://docs.rs/itu-rs"
+license = "MIT"
+keywords = ["itu-r", "propagation", "attenuation", "rf", "satellite"]
+categories = ["science"]
+include = [
+    "Cargo.toml",
+    "README.md",
+    "LICENSE",
+    "NOTICE.md",
+    "src/**",
+    "benches/**",
+    "examples/**",
+    "tests/**",
+]
+
+[lib]
+name = "itu_rs"
+
+[dependencies]
+ndarray = "0.16.0"
+ndarray-npy = "0.9.1"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "slant_path"
+harness = false
