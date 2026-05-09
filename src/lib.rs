@@ -1669,6 +1669,70 @@ fn validate_elevation_deg(elevation_deg: f64) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_lat_lon(lat_deg: f64, lon_deg: f64) -> Result<(), String> {
+    if !lat_deg.is_finite() || !lon_deg.is_finite() {
+        return Err("lat_deg and lon_deg must be finite".to_string());
+    }
+    if !(-90.0..=90.0).contains(&lat_deg) {
+        return Err("lat_deg must be in [-90, 90]".to_string());
+    }
+    Ok(())
+}
+
+fn validate_positive(name: &str, value: f64) -> Result<(), String> {
+    if !value.is_finite() {
+        return Err(format!("{name} must be finite"));
+    }
+    if value <= 0.0 {
+        return Err(format!("{name} must be > 0"));
+    }
+    Ok(())
+}
+
+fn validate_nonnegative(name: &str, value: f64) -> Result<(), String> {
+    if !value.is_finite() {
+        return Err(format!("{name} must be finite"));
+    }
+    if value < 0.0 {
+        return Err(format!("{name} must be >= 0"));
+    }
+    Ok(())
+}
+
+fn validate_finite(name: &str, value: f64) -> Result<(), String> {
+    if value.is_finite() {
+        Ok(())
+    } else {
+        Err(format!("{name} must be finite"))
+    }
+}
+
+fn validate_p(p: f64) -> Result<(), String> {
+    validate_positive("p", p)
+}
+
+fn validate_tau_deg(tau_deg: f64) -> Result<(), String> {
+    validate_finite("tau_deg", tau_deg)?;
+    if !(0.0..=90.0).contains(&tau_deg) {
+        return Err("tau_deg must be in [0, 90]".to_string());
+    }
+    Ok(())
+}
+
+fn validate_optional_nonnegative(name: &str, value: Option<f64>) -> Result<(), String> {
+    if let Some(value) = value {
+        validate_nonnegative(name, value)?;
+    }
+    Ok(())
+}
+
+fn validate_optional_positive(name: &str, value: Option<f64>) -> Result<(), String> {
+    if let Some(value) = value {
+        validate_positive(name, value)?;
+    }
+    Ok(())
+}
+
 fn validate_options(options: SlantPathOptions) -> Result<(), String> {
     let optional_values = [
         options.hs_km,
@@ -1781,6 +1845,563 @@ fn gas_attenuation_default_many_clamped(
         ));
     }
     Ok(out)
+}
+
+/// Looks up topographic altitude above mean sea level from ITU-R P.1511.
+pub fn topographic_altitude_km(lat_deg: f64, lon_deg: f64) -> std::result::Result<f64, ItuError> {
+    validate_lat_lon(lat_deg, lon_deg).map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .topographic_altitude_km(lat_deg, lon_deg))
+}
+
+/// Looks up annual mean surface temperature from ITU-R P.1510.
+pub fn surface_mean_temperature_k(
+    lat_deg: f64,
+    lon_deg: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_lat_lon(lat_deg, lon_deg).map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .surface_mean_temperature_k(lat_deg, lon_deg))
+}
+
+/// Computes standard-atmosphere temperature from ITU-R P.835.
+pub fn standard_temperature_k(h_km: f64) -> std::result::Result<f64, ItuError> {
+    validate_nonnegative("h_km", h_km).map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .standard_temperature_k(h_km))
+}
+
+/// Computes standard-atmosphere pressure from ITU-R P.835.
+pub fn standard_pressure_hpa(h_km: f64) -> std::result::Result<f64, ItuError> {
+    validate_nonnegative("h_km", h_km).map_err(ItuError::from)?;
+    Ok(model().map_err(ItuError::from)?.standard_pressure_hpa(h_km))
+}
+
+/// Computes standard water-vapour density from ITU-R P.835.
+pub fn standard_water_vapour_density_gm3(
+    h_km: f64,
+    rho0_gm3: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_nonnegative("h_km", h_km)
+        .and_then(|_| validate_nonnegative("rho0_gm3", rho0_gm3))
+        .map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .standard_water_vapour_density_gm3(h_km, rho0_gm3))
+}
+
+/// Looks up surface water-vapour density from ITU-R P.836.
+pub fn surface_water_vapour_density_gm3(
+    lat_deg: f64,
+    lon_deg: f64,
+    p: f64,
+    alt_km: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_lat_lon(lat_deg, lon_deg)
+        .and_then(|_| validate_p(p))
+        .and_then(|_| validate_finite("alt_km", alt_km))
+        .map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .surface_water_vapour_density_gm3(lat_deg, lon_deg, p, alt_km))
+}
+
+/// Looks up total columnar water-vapour content from ITU-R P.836.
+pub fn total_water_vapour_content_kgm2(
+    lat_deg: f64,
+    lon_deg: f64,
+    p: f64,
+    alt_km: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_lat_lon(lat_deg, lon_deg)
+        .and_then(|_| validate_p(p))
+        .and_then(|_| validate_finite("alt_km", alt_km))
+        .map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .total_water_vapour_content_kgm2(lat_deg, lon_deg, p, alt_km))
+}
+
+/// Looks up rainfall rate exceeded for 0.01% of an average year from ITU-R P.837.
+pub fn rainfall_rate_r001_mmh(lat_deg: f64, lon_deg: f64) -> std::result::Result<f64, ItuError> {
+    validate_lat_lon(lat_deg, lon_deg).map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .rainfall_rate_r001_mmh(lat_deg, lon_deg))
+}
+
+/// Looks up rain height from ITU-R P.839.
+pub fn rain_height_km(lat_deg: f64, lon_deg: f64) -> std::result::Result<f64, ItuError> {
+    validate_lat_lon(lat_deg, lon_deg).map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .rain_height_km(lat_deg, lon_deg))
+}
+
+/// Computes ITU-R P.838 rain specific attenuation coefficients.
+pub fn rain_specific_attenuation_coefficients(
+    freq_ghz: f64,
+    elevation_deg: f64,
+    tau_deg: f64,
+) -> std::result::Result<(f64, f64), ItuError> {
+    validate_positive("freq_ghz", freq_ghz)
+        .and_then(|_| validate_elevation_deg(elevation_deg))
+        .and_then(|_| validate_tau_deg(tau_deg))
+        .map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .rain_specific_attenuation_coefficients(freq_ghz, elevation_deg, tau_deg))
+}
+
+/// Computes ITU-R P.838 rain specific attenuation in dB/km.
+pub fn rain_specific_attenuation_db_per_km(
+    rainfall_rate_mmh: f64,
+    freq_ghz: f64,
+    elevation_deg: f64,
+    tau_deg: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_nonnegative("rainfall_rate_mmh", rainfall_rate_mmh)
+        .and_then(|_| validate_positive("freq_ghz", freq_ghz))
+        .and_then(|_| validate_elevation_deg(elevation_deg))
+        .and_then(|_| validate_tau_deg(tau_deg))
+        .map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .rain_specific_attenuation_db_per_km(rainfall_rate_mmh, freq_ghz, elevation_deg, tau_deg))
+}
+
+/// Looks up reduced cloud liquid water content from ITU-R P.840.
+pub fn cloud_reduced_liquid_kgm2(
+    lat_deg: f64,
+    lon_deg: f64,
+    p: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_lat_lon(lat_deg, lon_deg)
+        .and_then(|_| validate_p(p))
+        .map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .cloud_reduced_liquid_kgm2(lat_deg, lon_deg, p))
+}
+
+/// Computes the P.840 cloud liquid-water mass absorption coefficient.
+pub fn cloud_liquid_mass_absorption_coefficient(
+    freq_ghz: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_positive("freq_ghz", freq_ghz).map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .cloud_liquid_mass_absorption_coefficient(freq_ghz))
+}
+
+/// Computes the P.840 cloud specific attenuation coefficient.
+pub fn cloud_specific_attenuation_coefficient(
+    freq_ghz: f64,
+    temp_c: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_positive("freq_ghz", freq_ghz)
+        .and_then(|_| validate_finite("temp_c", temp_c))
+        .and_then(|_| {
+            if temp_c <= -273.15 {
+                Err("temp_c must be > -273.15".to_string())
+            } else {
+                Ok(())
+            }
+        })
+        .map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .cloud_specific_attenuation_coefficients(freq_ghz, temp_c))
+}
+
+/// Computes cloud attenuation from ITU-R P.840.
+#[allow(clippy::too_many_arguments)]
+pub fn cloud_attenuation_db(
+    lat_deg: f64,
+    lon_deg: f64,
+    elevation_deg: f64,
+    freq_ghz: f64,
+    p: f64,
+    lred_kgm2: Option<f64>,
+) -> std::result::Result<f64, ItuError> {
+    validate_lat_lon(lat_deg, lon_deg)
+        .and_then(|_| validate_elevation_deg(elevation_deg))
+        .and_then(|_| validate_positive("freq_ghz", freq_ghz))
+        .and_then(|_| validate_p(p))
+        .and_then(|_| validate_optional_nonnegative("lred_kgm2", lred_kgm2))
+        .map_err(ItuError::from)?;
+    Ok(model().map_err(ItuError::from)?.cloud_attenuation_db(
+        lat_deg,
+        lon_deg,
+        elevation_deg,
+        freq_ghz,
+        p,
+        lred_kgm2,
+    ))
+}
+
+/// Computes wet-term radio refractivity from ITU-R P.453.
+pub fn wet_term_radio_refractivity(e_hpa: f64, temp_c: f64) -> std::result::Result<f64, ItuError> {
+    validate_nonnegative("e_hpa", e_hpa)
+        .and_then(|_| validate_finite("temp_c", temp_c))
+        .and_then(|_| {
+            if temp_c <= -273.15 {
+                Err("temp_c must be > -273.15".to_string())
+            } else {
+                Ok(())
+            }
+        })
+        .map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .wet_term_radio_refractivity(e_hpa, temp_c))
+}
+
+/// Computes radio refractive index from ITU-R P.453.
+pub fn radio_refractive_index(
+    pd_hpa: f64,
+    e_hpa: f64,
+    temp_k: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_nonnegative("pd_hpa", pd_hpa)
+        .and_then(|_| validate_nonnegative("e_hpa", e_hpa))
+        .and_then(|_| validate_positive("temp_k", temp_k))
+        .map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .radio_refractive_index(pd_hpa, e_hpa, temp_k))
+}
+
+/// Computes water-vapour pressure from ITU-R P.453.
+pub fn water_vapour_pressure_hpa(
+    temp_c: f64,
+    pressure_hpa: f64,
+    humidity_percent: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_finite("temp_c", temp_c)
+        .and_then(|_| validate_positive("pressure_hpa", pressure_hpa))
+        .and_then(|_| validate_finite("humidity_percent", humidity_percent))
+        .and_then(|_| {
+            if temp_c <= -273.15 {
+                Err("temp_c must be > -273.15".to_string())
+            } else if !(0.0..=100.0).contains(&humidity_percent) {
+                Err("humidity_percent must be in [0, 100]".to_string())
+            } else {
+                Ok(())
+            }
+        })
+        .map_err(ItuError::from)?;
+    Ok(model().map_err(ItuError::from)?.water_vapour_pressure_hpa(
+        temp_c,
+        pressure_hpa,
+        humidity_percent,
+    ))
+}
+
+/// Looks up wet-term radio refractivity maps from ITU-R P.453.
+pub fn map_wet_term_radio_refractivity(
+    lat_deg: f64,
+    lon_deg: f64,
+    p: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_lat_lon(lat_deg, lon_deg)
+        .and_then(|_| validate_p(p))
+        .map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .map_wet_term_radio_refractivity(lat_deg, lon_deg, p))
+}
+
+/// Computes dry-air specific attenuation from ITU-R P.676 in dB/km.
+pub fn gamma0_exact_db_per_km(
+    freq_ghz: f64,
+    pressure_hpa: f64,
+    rho_gm3: f64,
+    temp_k: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_positive("freq_ghz", freq_ghz)
+        .and_then(|_| validate_positive("pressure_hpa", pressure_hpa))
+        .and_then(|_| validate_nonnegative("rho_gm3", rho_gm3))
+        .and_then(|_| validate_positive("temp_k", temp_k))
+        .map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .gamma0_exact_v13(freq_ghz, pressure_hpa, rho_gm3, temp_k))
+}
+
+/// Computes water-vapour specific attenuation from ITU-R P.676 in dB/km.
+pub fn gammaw_exact_db_per_km(
+    freq_ghz: f64,
+    pressure_hpa: f64,
+    rho_gm3: f64,
+    temp_k: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_positive("freq_ghz", freq_ghz)
+        .and_then(|_| validate_positive("pressure_hpa", pressure_hpa))
+        .and_then(|_| validate_nonnegative("rho_gm3", rho_gm3))
+        .and_then(|_| validate_positive("temp_k", temp_k))
+        .map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .gammaw_exact_v13(freq_ghz, pressure_hpa, rho_gm3, temp_k))
+}
+
+/// Computes total specific gaseous attenuation from ITU-R P.676 in dB/km.
+pub fn gamma_exact_db_per_km(
+    freq_ghz: f64,
+    pressure_hpa: f64,
+    rho_gm3: f64,
+    temp_k: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_positive("freq_ghz", freq_ghz)
+        .and_then(|_| validate_positive("pressure_hpa", pressure_hpa))
+        .and_then(|_| validate_nonnegative("rho_gm3", rho_gm3))
+        .and_then(|_| validate_positive("temp_k", temp_k))
+        .map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .gamma_exact_v13(freq_ghz, pressure_hpa, rho_gm3, temp_k))
+}
+
+/// Computes P.676 equivalent heights for dry air and water vapour.
+pub fn slant_inclined_path_equivalent_height_km(
+    freq_ghz: f64,
+    pressure_hpa: f64,
+    rho_gm3: f64,
+    temp_k: f64,
+) -> std::result::Result<(f64, f64), ItuError> {
+    validate_positive("freq_ghz", freq_ghz)
+        .and_then(|_| validate_positive("pressure_hpa", pressure_hpa))
+        .and_then(|_| validate_nonnegative("rho_gm3", rho_gm3))
+        .and_then(|_| validate_positive("temp_k", temp_k))
+        .map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .slant_inclined_path_equivalent_height_v13(freq_ghz, pressure_hpa, rho_gm3, temp_k))
+}
+
+/// Computes P.676 zenith water-vapour attenuation.
+pub fn zenith_water_vapour_attenuation_db(
+    freq_ghz: f64,
+    v_t_kgm2: f64,
+    h_km: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_positive("freq_ghz", freq_ghz)
+        .and_then(|_| validate_nonnegative("v_t_kgm2", v_t_kgm2))
+        .and_then(|_| validate_nonnegative("h_km", h_km))
+        .map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .zenith_water_vapour_attenuation_db(freq_ghz, v_t_kgm2, h_km))
+}
+
+/// Computes gaseous attenuation on an Earth-space slant path from ITU-R P.676.
+#[allow(clippy::too_many_arguments)]
+pub fn gaseous_attenuation_slant_path_db(
+    freq_ghz: f64,
+    elevation_deg: f64,
+    rho_gm3: f64,
+    pressure_hpa: f64,
+    temp_k: f64,
+    v_t_kgm2: f64,
+    h_km: f64,
+    exact: bool,
+) -> std::result::Result<f64, ItuError> {
+    validate_positive("freq_ghz", freq_ghz)
+        .and_then(|_| validate_elevation_deg(elevation_deg))
+        .and_then(|_| validate_nonnegative("rho_gm3", rho_gm3))
+        .and_then(|_| validate_positive("pressure_hpa", pressure_hpa))
+        .and_then(|_| validate_positive("temp_k", temp_k))
+        .and_then(|_| validate_nonnegative("v_t_kgm2", v_t_kgm2))
+        .and_then(|_| validate_nonnegative("h_km", h_km))
+        .map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .gaseous_attenuation_slant_path_v13(
+            freq_ghz,
+            elevation_deg,
+            rho_gm3,
+            pressure_hpa,
+            temp_k,
+            v_t_kgm2,
+            h_km,
+            exact,
+        ))
+}
+
+/// Computes rain attenuation from ITU-R P.618.
+#[allow(clippy::too_many_arguments)]
+pub fn rain_attenuation_db(
+    lat_deg: f64,
+    lon_deg: f64,
+    freq_ghz: f64,
+    elevation_deg: f64,
+    hs_km: f64,
+    p: f64,
+    r001_mmh: Option<f64>,
+    tau_deg: f64,
+    l_s_km: Option<f64>,
+) -> std::result::Result<f64, ItuError> {
+    validate_lat_lon(lat_deg, lon_deg)
+        .and_then(|_| validate_positive("freq_ghz", freq_ghz))
+        .and_then(|_| validate_elevation_deg(elevation_deg))
+        .and_then(|_| validate_finite("hs_km", hs_km))
+        .and_then(|_| validate_p(p))
+        .and_then(|_| validate_optional_nonnegative("r001_mmh", r001_mmh))
+        .and_then(|_| validate_tau_deg(tau_deg))
+        .and_then(|_| validate_optional_positive("l_s_km", l_s_km))
+        .map_err(ItuError::from)?;
+    Ok(model().map_err(ItuError::from)?.rain_attenuation_db(
+        lat_deg,
+        lon_deg,
+        freq_ghz,
+        elevation_deg,
+        hs_km,
+        p,
+        r001_mmh,
+        tau_deg,
+        l_s_km,
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn validate_scintillation_inputs(
+    lat_deg: f64,
+    lon_deg: f64,
+    freq_ghz: f64,
+    elevation_deg: f64,
+    dish_m: f64,
+    eta: f64,
+    temp_c: Option<f64>,
+    humidity_percent: Option<f64>,
+    pressure_hpa: Option<f64>,
+    h_l_m: f64,
+) -> Result<(), String> {
+    validate_lat_lon(lat_deg, lon_deg)
+        .and_then(|_| validate_positive("freq_ghz", freq_ghz))
+        .and_then(|_| validate_elevation_deg(elevation_deg))
+        .and_then(|_| validate_positive("dish_m", dish_m))
+        .and_then(|_| validate_positive("h_l_m", h_l_m))
+        .and_then(|_| validate_finite("eta", eta))?;
+    if eta > 1.0 {
+        return Err("eta must be in (0, 1]".to_string());
+    }
+
+    match (temp_c, humidity_percent, pressure_hpa) {
+        (None, None, None) => Ok(()),
+        (Some(t), Some(h), Some(p_hpa)) => validate_finite("temp_c", t)
+            .and_then(|_| {
+                if t <= -273.15 {
+                    Err("temp_c must be > -273.15".to_string())
+                } else {
+                    Ok(())
+                }
+            })
+            .and_then(|_| validate_finite("humidity_percent", h))
+            .and_then(|_| {
+                if !(0.0..=100.0).contains(&h) {
+                    Err("humidity_percent must be in [0, 100]".to_string())
+                } else {
+                    Ok(())
+                }
+            })
+            .and_then(|_| validate_positive("pressure_hpa", p_hpa)),
+        _ => {
+            Err("temp_c, humidity_percent, and pressure_hpa must be supplied together".to_string())
+        }
+    }
+}
+
+/// Computes the P.618 scintillation standard deviation in dB.
+#[allow(clippy::too_many_arguments)]
+pub fn scintillation_sigma_db(
+    lat_deg: f64,
+    lon_deg: f64,
+    freq_ghz: f64,
+    elevation_deg: f64,
+    dish_m: f64,
+    eta: f64,
+    temp_c: Option<f64>,
+    humidity_percent: Option<f64>,
+    pressure_hpa: Option<f64>,
+    h_l_m: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_scintillation_inputs(
+        lat_deg,
+        lon_deg,
+        freq_ghz,
+        elevation_deg,
+        dish_m,
+        eta,
+        temp_c,
+        humidity_percent,
+        pressure_hpa,
+        h_l_m,
+    )
+    .map_err(ItuError::from)?;
+    Ok(model().map_err(ItuError::from)?.scintillation_sigma_db(
+        lat_deg,
+        lon_deg,
+        freq_ghz,
+        elevation_deg,
+        dish_m,
+        eta,
+        temp_c,
+        humidity_percent,
+        pressure_hpa,
+        h_l_m,
+    ))
+}
+
+/// Computes scintillation attenuation from ITU-R P.618.
+#[allow(clippy::too_many_arguments)]
+pub fn scintillation_attenuation_db(
+    lat_deg: f64,
+    lon_deg: f64,
+    freq_ghz: f64,
+    elevation_deg: f64,
+    p: f64,
+    dish_m: f64,
+    eta: f64,
+    temp_c: Option<f64>,
+    humidity_percent: Option<f64>,
+    pressure_hpa: Option<f64>,
+    h_l_m: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_p(p)
+        .and_then(|_| {
+            validate_scintillation_inputs(
+                lat_deg,
+                lon_deg,
+                freq_ghz,
+                elevation_deg,
+                dish_m,
+                eta,
+                temp_c,
+                humidity_percent,
+                pressure_hpa,
+                h_l_m,
+            )
+        })
+        .map_err(ItuError::from)?;
+    Ok(model()
+        .map_err(ItuError::from)?
+        .scintillation_attenuation_db(
+            lat_deg,
+            lon_deg,
+            freq_ghz,
+            elevation_deg,
+            p,
+            dish_m,
+            eta,
+            temp_c,
+            humidity_percent,
+            pressure_hpa,
+            h_l_m,
+        ))
 }
 
 /// Computes gas-only atmospheric attenuation for one elevation angle.

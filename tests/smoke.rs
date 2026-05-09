@@ -1,6 +1,15 @@
 use itu_rs::{
     SlantPathOptions, atmospheric_attenuation_slant_path, atmospheric_attenuation_slant_path_many,
-    gas_attenuation_default, gas_attenuation_default_many_checked,
+    cloud_attenuation_db, cloud_liquid_mass_absorption_coefficient, cloud_reduced_liquid_kgm2,
+    cloud_specific_attenuation_coefficient, gamma_exact_db_per_km, gamma0_exact_db_per_km,
+    gammaw_exact_db_per_km, gas_attenuation_default, gas_attenuation_default_many_checked,
+    gaseous_attenuation_slant_path_db, map_wet_term_radio_refractivity, radio_refractive_index,
+    rain_attenuation_db, rain_height_km, rain_specific_attenuation_coefficients,
+    rain_specific_attenuation_db_per_km, rainfall_rate_r001_mmh, scintillation_attenuation_db,
+    scintillation_sigma_db, slant_inclined_path_equivalent_height_km, standard_pressure_hpa,
+    standard_temperature_k, standard_water_vapour_density_gm3, surface_mean_temperature_k,
+    surface_water_vapour_density_gm3, topographic_altitude_km, total_water_vapour_content_kgm2,
+    water_vapour_pressure_hpa, wet_term_radio_refractivity, zenith_water_vapour_attenuation_db,
 };
 use std::path::Path;
 
@@ -95,4 +104,182 @@ fn invalid_inputs_are_rejected() {
     .unwrap_err();
 
     assert_eq!(err.message(), "lat_deg must be in [-90, 90]");
+}
+
+#[test]
+fn direct_lookup_wrappers_return_finite_values() {
+    if !data_available() {
+        return;
+    }
+
+    let lat = 45.4215;
+    let lon = -75.6972;
+    let p = 1.0;
+    let h_km = topographic_altitude_km(lat, lon).unwrap();
+
+    let values = [
+        h_km,
+        surface_mean_temperature_k(lat, lon).unwrap(),
+        standard_temperature_k(h_km).unwrap(),
+        standard_pressure_hpa(h_km).unwrap(),
+        standard_water_vapour_density_gm3(h_km, 7.5).unwrap(),
+        surface_water_vapour_density_gm3(lat, lon, p, h_km).unwrap(),
+        total_water_vapour_content_kgm2(lat, lon, p, h_km).unwrap(),
+        rainfall_rate_r001_mmh(lat, lon).unwrap(),
+        rain_height_km(lat, lon).unwrap(),
+        cloud_reduced_liquid_kgm2(lat, lon, p).unwrap(),
+        cloud_liquid_mass_absorption_coefficient(12.0).unwrap(),
+        cloud_specific_attenuation_coefficient(12.0, 0.6).unwrap(),
+        wet_term_radio_refractivity(12.0, 15.0).unwrap(),
+        radio_refractive_index(1000.0, 12.0, 288.15).unwrap(),
+        water_vapour_pressure_hpa(15.0, 1000.0, 60.0).unwrap(),
+        map_wet_term_radio_refractivity(lat, lon, 50.0).unwrap(),
+        gamma0_exact_db_per_km(12.0, 1008.0, 7.5, 289.2).unwrap(),
+        gammaw_exact_db_per_km(12.0, 1008.0, 7.5, 289.2).unwrap(),
+        gamma_exact_db_per_km(12.0, 1008.0, 7.5, 289.2).unwrap(),
+        zenith_water_vapour_attenuation_db(12.0, 22.5, h_km).unwrap(),
+    ];
+
+    assert!(values.iter().all(|value| value.is_finite()));
+
+    let (h0, hw) = slant_inclined_path_equivalent_height_km(12.0, 1008.0, 7.5, 289.2).unwrap();
+    assert!(h0.is_finite());
+    assert!(hw.is_finite());
+
+    let (k, alpha) = rain_specific_attenuation_coefficients(12.0, 30.0, 45.0).unwrap();
+    assert!(k.is_finite());
+    assert!(alpha.is_finite());
+}
+
+#[test]
+fn rain_specific_attenuation_matches_coefficients() {
+    let rainfall_rate = 28.0;
+    let (k, alpha) = rain_specific_attenuation_coefficients(12.0, 30.0, 45.0).unwrap();
+    let gamma = rain_specific_attenuation_db_per_km(rainfall_rate, 12.0, 30.0, 45.0).unwrap();
+    assert!((gamma - k * rainfall_rate.powf(alpha)).abs() < 1e-12);
+}
+
+#[test]
+fn direct_component_wrappers_match_slant_path_contributions() {
+    if !data_available() {
+        return;
+    }
+
+    let lat = 45.4215;
+    let lon = -75.6972;
+    let freq = 12.0;
+    let elevation = 30.0;
+    let p = 1.0;
+    let dish_m = 1.2;
+
+    let gas_options = SlantPathOptions {
+        hs_km: Some(0.4),
+        rho_gm3: Some(7.5),
+        t: Some(289.2),
+        pressure_hpa: Some(1008.0),
+        v_t_kgm2: Some(22.5),
+        include_rain: false,
+        include_clouds: false,
+        include_scintillation: false,
+        ..SlantPathOptions::default()
+    };
+    let gas = atmospheric_attenuation_slant_path(lat, lon, freq, elevation, p, dish_m, gas_options)
+        .unwrap();
+    let direct_gas =
+        gaseous_attenuation_slant_path_db(freq, elevation, 7.5, 1008.0, 289.2, 22.5, 0.4, false)
+            .unwrap();
+    assert!((gas.gas_db - direct_gas).abs() < 1e-12);
+
+    let rain_options = SlantPathOptions {
+        hs_km: Some(0.4),
+        r001_mmh: Some(28.0),
+        tau_deg: 33.0,
+        l_s_km: Some(6.7),
+        include_gas: false,
+        include_clouds: false,
+        include_scintillation: false,
+        ..SlantPathOptions::default()
+    };
+    let rain =
+        atmospheric_attenuation_slant_path(lat, lon, freq, elevation, p, dish_m, rain_options)
+            .unwrap();
+    let direct_rain = rain_attenuation_db(
+        lat,
+        lon,
+        freq,
+        elevation,
+        0.4,
+        p,
+        Some(28.0),
+        33.0,
+        Some(6.7),
+    )
+    .unwrap();
+    assert!((rain.rain_db - direct_rain).abs() < 1e-12);
+
+    let cloud_options = SlantPathOptions {
+        include_rain: false,
+        include_gas: false,
+        include_scintillation: false,
+        ..SlantPathOptions::default()
+    };
+    let cloud =
+        atmospheric_attenuation_slant_path(lat, lon, freq, elevation, p, dish_m, cloud_options)
+            .unwrap();
+    let direct_cloud = cloud_attenuation_db(lat, lon, elevation, freq, p, None).unwrap();
+    assert!((cloud.cloud_db - direct_cloud).abs() < 1e-12);
+
+    let scintillation_options = SlantPathOptions {
+        include_rain: false,
+        include_gas: false,
+        include_clouds: false,
+        ..SlantPathOptions::default()
+    };
+    let scintillation = atmospheric_attenuation_slant_path(
+        lat,
+        lon,
+        freq,
+        elevation,
+        p,
+        dish_m,
+        scintillation_options,
+    )
+    .unwrap();
+    let sigma = scintillation_sigma_db(
+        lat, lon, freq, elevation, dish_m, 0.5, None, None, None, 1000.0,
+    )
+    .unwrap();
+    let direct_scintillation = scintillation_attenuation_db(
+        lat, lon, freq, elevation, p, dish_m, 0.5, None, None, None, 1000.0,
+    )
+    .unwrap();
+    assert!(sigma.is_finite());
+    assert!((scintillation.scintillation_db - direct_scintillation).abs() < 1e-12);
+}
+
+#[test]
+fn direct_wrapper_invalid_inputs_are_rejected() {
+    let err = rainfall_rate_r001_mmh(91.0, 0.0).unwrap_err();
+    assert_eq!(err.message(), "lat_deg must be in [-90, 90]");
+
+    let err = cloud_attenuation_db(0.0, 0.0, 0.0, 12.0, 1.0, None).unwrap_err();
+    assert_eq!(err.message(), "elevation_deg must be in (0, 90)");
+
+    let err = scintillation_sigma_db(
+        0.0,
+        0.0,
+        12.0,
+        30.0,
+        1.2,
+        0.5,
+        Some(10.0),
+        None,
+        Some(1000.0),
+        1000.0,
+    )
+    .unwrap_err();
+    assert_eq!(
+        err.message(),
+        "temp_c, humidity_percent, and pressure_hpa must be supplied together"
+    );
 }

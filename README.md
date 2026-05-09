@@ -120,16 +120,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 | `itur.atmospheric_attenuation_slant_path` | ✅ | Public API |
 | Batched slant-path attenuation over elevation angles | ✅ | Public API |
 | Gas-only default slant-path attenuation helper | ✅ | Public API |
-| P.676 gaseous attenuation, exact and approximate paths | ✅ | Internal/public through slant path |
-| P.618 rain attenuation contribution | ✅ | Internal/public through contributions |
-| P.618 scintillation attenuation contribution | ✅ | Internal/public through contributions |
-| P.840 cloud attenuation contribution | ✅ | Internal/public through contributions |
-| P.1511 topographic altitude lookup | ✅ | Internal data support |
-| P.1510 surface mean temperature lookup | ✅ | Internal data support |
-| P.836 water vapour density and total content lookup | ✅ | Internal data support |
-| P.837 rainfall rate lookup | ✅ | Internal data support |
-| P.839 rain height lookup | ✅ | Internal data support |
-| P.453 wet-term radio refractivity lookup | ✅ | Internal data support |
+| P.676 gaseous attenuation, exact and approximate paths | ✅ | Public scalar APIs |
+| P.618 rain attenuation contribution | ✅ | Public scalar API |
+| P.618 scintillation attenuation contribution | ✅ | Public scalar APIs |
+| P.840 cloud attenuation contribution | ✅ | Public scalar APIs |
+| P.1511 topographic altitude lookup | ✅ | Public scalar API |
+| P.1510 surface mean temperature lookup | ✅ | Public scalar API |
+| P.836 water vapour density and total content lookup | ✅ | Public scalar APIs |
+| P.837 rainfall rate lookup | ✅ | Public scalar API |
+| P.839 rain height lookup | ✅ | Public scalar API |
+| P.453 wet-term radio refractivity lookup | ✅ | Public scalar APIs |
+| P.835 reference atmosphere | ✅ | Public scalar APIs |
+| P.838 rain specific attenuation | ✅ | Public scalar APIs |
 | Full `python-itu-r` package API | ❌ | Out of scope for this crate |
 
 ## Long-Term Goals
@@ -170,6 +172,19 @@ The primary public calls are:
 | `gas_attenuation_default` | Compute gas-only default attenuation for one elevation angle. |
 | `gas_attenuation_default_many` | Compute gas-only default attenuation for many elevation angles. |
 | `gas_attenuation_default_many_checked` | Compatibility alias for strict gas-only batch validation. |
+
+Additional scalar APIs expose the implemented recommendation pieces directly:
+
+| Recommendation | Public functions |
+|---|---|
+| P.1510/P.1511 | `surface_mean_temperature_k`, `topographic_altitude_km` |
+| P.835 | `standard_temperature_k`, `standard_pressure_hpa`, `standard_water_vapour_density_gm3` |
+| P.836/P.837/P.839 | `surface_water_vapour_density_gm3`, `total_water_vapour_content_kgm2`, `rainfall_rate_r001_mmh`, `rain_height_km` |
+| P.838 | `rain_specific_attenuation_coefficients`, `rain_specific_attenuation_db_per_km` |
+| P.840 | `cloud_reduced_liquid_kgm2`, `cloud_liquid_mass_absorption_coefficient`, `cloud_specific_attenuation_coefficient`, `cloud_attenuation_db` |
+| P.453 | `wet_term_radio_refractivity`, `radio_refractive_index`, `water_vapour_pressure_hpa`, `map_wet_term_radio_refractivity` |
+| P.676 | `gamma0_exact_db_per_km`, `gammaw_exact_db_per_km`, `gamma_exact_db_per_km`, `slant_inclined_path_equivalent_height_km`, `zenith_water_vapour_attenuation_db`, `gaseous_attenuation_slant_path_db` |
+| P.618 | `rain_attenuation_db`, `scintillation_sigma_db`, `scintillation_attenuation_db` |
 
 `SlantPathOptions::default()` matches the default slant-path configuration used
 by the port. Set `exact = true` to use exact gaseous attenuation.
