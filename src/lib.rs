@@ -12,6 +12,34 @@
 //! package, set `ITU_RS_DATA_DIR` to a directory containing the `python-itu-r`
 //! `itur/data` layout.
 //!
+//! The examples that depend on recommendation grids check whether data is
+//! available before calling the model. That keeps doctests useful in this
+//! repository, with `features = ["data"]`, and in downstream builds that set
+//! `ITU_RS_DATA_DIR`.
+//!
+//! # Conventions
+//!
+//! Public APIs use plain `f64` values and encode units in argument and return
+//! names:
+//!
+//! - `_deg`: degrees. `lat_deg` is geodetic latitude and must be in
+//!   `[-90, 90]`. `lon_deg` is geodetic longitude; any finite degree value is
+//!   accepted and map lookups wrap it internally.
+//! - `_ghz`: carrier frequency in gigahertz.
+//! - `_km` and `_m`: kilometres and metres. Site heights are above mean sea
+//!   level unless the function says otherwise.
+//! - `_hpa`: pressure in hectopascals.
+//! - `_gm3`: density in grams per cubic metre.
+//! - `_kgm2`: columnar mass in kilograms per square metre.
+//! - `_mmh`: rainfall rate in millimetres per hour.
+//! - `_db` and `_db_per_km`: attenuation in decibels and specific attenuation
+//!   in decibels per kilometre.
+//! - `_k` and `_c`: temperature in kelvin and degrees Celsius.
+//!
+//! The `p` argument is a percentage of time exceeded, not a probability
+//! fraction. For example, `0.1` means 0.1% of an average year. Elevation angles
+//! are above the local horizon and must be in the open interval `(0, 90)`.
+//!
 //! # Example
 //!
 //! ```
@@ -40,12 +68,6 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
-//! # Units
-//!
-//! Public APIs use plain `f64` values with explicit unit suffixes in parameter
-//! names: degrees for angles, GHz for frequency, metres for antenna diameter,
-//! kilometres for heights and path lengths where noted, and dB for attenuation
-//! outputs.
 
 use ndarray::{Array2, Axis};
 use ndarray_npy::NpzReader;
@@ -81,6 +103,19 @@ impl ItuError {
     }
 
     /// Returns the human-readable error message.
+    ///
+    /// The message names the input or model-loading problem that caused the
+    /// operation to fail. Validation errors do not require ITU-R data to be
+    /// loaded, so they are useful for checking bad inputs before any grid files
+    /// are touched.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let err = itu_rs::rainfall_rate_r001_mmh(91.0, 0.0).unwrap_err();
+    ///
+    /// assert_eq!(err.message(), "lat_deg must be in [-90, 90]");
+    /// ```
     pub fn message(&self) -> &str {
         &self.message
     }
@@ -325,69 +360,127 @@ struct IturModel {
 pub struct SlantPathOptions {
     /// Earth station altitude above mean sea level in kilometres.
     ///
-    /// When `None`, P.1511/P.836 topographic data are used.
+    /// This is the ground terminal height used by rain, gas, and water-vapour
+    /// calculations. It may be negative for sites below sea level. When `None`,
+    /// the model uses the P.1511/P.836 topographic map at the requested site.
     pub hs_km: Option<f64>,
     /// Surface water vapour density in g/m^3.
     ///
-    /// When `None`, P.836 water vapour data are used.
+    /// This is the near-surface absolute humidity used by gaseous attenuation.
+    /// Values must be non-negative. When `None`, P.836 water-vapour maps are
+    /// used for the site and time percentage.
     pub rho_gm3: Option<f64>,
     /// Rainfall rate exceeded for 0.01% of an average year, in mm/h.
     ///
-    /// When `None`, P.837 data are used.
+    /// This is the intense-rain reference rate used by P.618 to scale rain
+    /// attenuation for the requested time percentage. Values must be
+    /// non-negative. When `None`, P.837 data are used.
     pub r001_mmh: Option<f64>,
     /// Antenna efficiency factor used in scintillation attenuation.
+    ///
+    /// This dimensionless factor describes effective aperture efficiency for
+    /// the scintillation fade calculation. It must be in `(0, 1]`; the default
+    /// is `0.5`.
     pub eta: f64,
     /// Surface temperature in kelvin for gaseous attenuation.
     ///
-    /// When `None`, P.1510 surface mean temperature data are used.
+    /// This temperature is used by gaseous attenuation and, when
+    /// `h_percent` is provided, converted to Celsius for scintillation humidity
+    /// calculations. Values must be greater than zero. When `None`, P.1510
+    /// annual mean surface temperature data are used.
     pub t: Option<f64>,
     /// Relative humidity percentage for scintillation attenuation.
+    ///
+    /// Values must be in `[0, 100]`. When `None`, scintillation uses the
+    /// recommendation's wet-term refractivity map instead of local humidity,
+    /// temperature, and pressure.
     pub h_percent: Option<f64>,
     /// Atmospheric pressure in hPa.
     ///
-    /// When `None`, standard atmosphere pressure is computed from site height.
+    /// This is the surface pressure used by gaseous attenuation and, when
+    /// `h_percent` is provided, scintillation water-vapour pressure. Values
+    /// must be positive. When `None`, P.835 standard-atmosphere pressure is
+    /// computed from `hs_km`.
     pub pressure_hpa: Option<f64>,
     /// Turbulent layer height in metres for scintillation attenuation.
+    ///
+    /// This is the effective height of the tropospheric turbulent layer. It
+    /// must be positive; the default is `1000.0` m.
     pub h_l_m: f64,
     /// Slant-path length through rain in kilometres.
     ///
-    /// When `None`, the P.618 rain path length is derived from rain height and
-    /// elevation.
+    /// This is the portion of the Earth-space path inside the rain region.
+    /// Values must be positive when provided. When `None`, P.618 derives the
+    /// path length from rain height, station height, and elevation.
     pub l_s_km: Option<f64>,
     /// Polarization tilt angle in degrees.
+    ///
+    /// This describes the radio wave polarization relative to horizontal and
+    /// affects P.838 rain specific attenuation coefficients. It must be in
+    /// `[0, 90]`; the default is `45.0`.
     pub tau_deg: f64,
     /// Total water vapour content in kg/m^2 for gaseous attenuation.
     ///
-    /// When `None`, P.836 total water vapour content data are used.
+    /// This is the vertically integrated water-vapour column above the site.
+    /// Values must be non-negative. When `None`, P.836 total-content maps are
+    /// used.
     pub v_t_kgm2: Option<f64>,
     /// Use exact gaseous attenuation when `true`; use the faster approximate
     /// path when `false`.
+    ///
+    /// Exact mode integrates the P.676 gaseous model through atmosphere layers.
+    /// Approximate mode is faster and matches the default slant-path behavior
+    /// of the port. The default is `false`.
     pub exact: bool,
-    /// Include the rain attenuation contribution.
+    /// Include the rain attenuation contribution in the returned total.
+    ///
+    /// When `false`, `SlantPathContributions::rain_db` is `0.0`.
     pub include_rain: bool,
-    /// Include the gaseous attenuation contribution.
+    /// Include the gaseous attenuation contribution in the returned total.
+    ///
+    /// When `false`, `SlantPathContributions::gas_db` is `0.0`.
     pub include_gas: bool,
-    /// Include the scintillation attenuation contribution.
+    /// Include the scintillation attenuation contribution in the returned total.
+    ///
+    /// When `false`, `SlantPathContributions::scintillation_db` is `0.0`.
     pub include_scintillation: bool,
-    /// Include the cloud attenuation contribution.
+    /// Include the cloud attenuation contribution in the returned total.
+    ///
+    /// When `false`, `SlantPathContributions::cloud_db` is `0.0`.
     pub include_clouds: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
 /// Atmospheric attenuation contribution breakdown in dB.
+///
+/// The fields separate the mechanisms used by the supported Earth-space
+/// slant-path model. `total_db` is not a plain sum of all fields; it follows the
+/// ported combination rule:
+///
+/// `gas_db + sqrt((rain_db + cloud_db)^2 + scintillation_db^2)`.
 pub struct SlantPathContributions {
-    /// Gaseous attenuation contribution in dB.
+    /// Gaseous absorption contribution in dB.
+    ///
+    /// This comes from oxygen and water-vapour absorption along the slant path.
     pub gas_db: f64,
-    /// Cloud attenuation contribution in dB.
+    /// Cloud liquid-water attenuation contribution in dB.
+    ///
+    /// This comes from reduced liquid water content and cloud mass absorption.
     pub cloud_db: f64,
-    /// Rain attenuation contribution in dB.
+    /// Rain fade contribution in dB.
+    ///
+    /// This comes from the P.618 rain model using rain rate, rain height,
+    /// elevation, path geometry, and polarization.
     pub rain_db: f64,
-    /// Scintillation attenuation contribution in dB.
+    /// Tropospheric scintillation contribution in dB.
+    ///
+    /// This represents short-term amplitude fluctuations caused by turbulence.
     pub scintillation_db: f64,
     /// Total attenuation in dB.
     ///
     /// This follows the same combination rule as `python-itu-r` for the
-    /// supported slant-path model.
+    /// supported slant-path model:
+    /// `gas_db + sqrt((rain_db + cloud_db)^2 + scintillation_db^2)`.
     pub total_db: f64,
 }
 
@@ -1848,6 +1941,43 @@ fn gas_attenuation_default_many_clamped(
 }
 
 /// Looks up topographic altitude above mean sea level from ITU-R P.1511.
+///
+/// This is the terrain height used when a slant-path calculation needs the
+/// Earth station altitude and `SlantPathOptions::hs_km` is not supplied.
+///
+/// # Parameters
+///
+/// - `lat_deg`: station geodetic latitude in degrees, in `[-90, 90]`.
+/// - `lon_deg`: station geodetic longitude in degrees.
+///
+/// # Returns
+///
+/// Terrain height in kilometres above mean sea level. The value is clamped to a
+/// tiny positive floor internally so downstream propagation equations do not
+/// see an exact zero height.
+///
+/// # Errors
+///
+/// Returns an error if coordinates are not finite, latitude is outside
+/// `[-90, 90]`, or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/1511/v2_lat.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let h_km = itu_rs::topographic_altitude_km(45.4215, -75.6972)?;
+///
+/// assert!(h_km.is_finite());
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn topographic_altitude_km(lat_deg: f64, lon_deg: f64) -> std::result::Result<f64, ItuError> {
     validate_lat_lon(lat_deg, lon_deg).map_err(ItuError::from)?;
     Ok(model()
@@ -1856,6 +1986,40 @@ pub fn topographic_altitude_km(lat_deg: f64, lon_deg: f64) -> std::result::Resul
 }
 
 /// Looks up annual mean surface temperature from ITU-R P.1510.
+///
+/// This provides the site temperature used by default slant-path gas
+/// calculations when `SlantPathOptions::t` is not supplied.
+///
+/// # Parameters
+///
+/// - `lat_deg`: station geodetic latitude in degrees, in `[-90, 90]`.
+/// - `lon_deg`: station geodetic longitude in degrees.
+///
+/// # Returns
+///
+/// Annual mean surface temperature in kelvin.
+///
+/// # Errors
+///
+/// Returns an error if coordinates are invalid or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/1510/v1_lat.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let temp_k = itu_rs::surface_mean_temperature_k(45.4215, -75.6972)?;
+///
+/// assert!(temp_k > 0.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn surface_mean_temperature_k(
     lat_deg: f64,
     lon_deg: f64,
@@ -1867,6 +2031,42 @@ pub fn surface_mean_temperature_k(
 }
 
 /// Computes standard-atmosphere temperature from ITU-R P.835.
+///
+/// The P.835 reference atmosphere supplies a temperature profile by geometric
+/// height. This is useful when a site-specific temperature is not available or
+/// when evaluating gas attenuation at a layer height.
+///
+/// # Parameters
+///
+/// - `h_km`: geometric height above mean sea level in kilometres. Must be
+///   non-negative.
+///
+/// # Returns
+///
+/// Standard-atmosphere temperature in kelvin.
+///
+/// # Errors
+///
+/// Returns an error if `h_km` is not finite, is negative, or model data cannot
+/// be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/1511/v2_lat.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let temp_k = itu_rs::standard_temperature_k(1.0)?;
+///
+/// assert!(temp_k > 0.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn standard_temperature_k(h_km: f64) -> std::result::Result<f64, ItuError> {
     validate_nonnegative("h_km", h_km).map_err(ItuError::from)?;
     Ok(model()
@@ -1875,12 +2075,83 @@ pub fn standard_temperature_k(h_km: f64) -> std::result::Result<f64, ItuError> {
 }
 
 /// Computes standard-atmosphere pressure from ITU-R P.835.
+///
+/// The pressure profile is used by the gas model when surface pressure is not
+/// supplied explicitly.
+///
+/// # Parameters
+///
+/// - `h_km`: geometric height above mean sea level in kilometres. Must be
+///   non-negative.
+///
+/// # Returns
+///
+/// Dry-air atmospheric pressure in hPa.
+///
+/// # Errors
+///
+/// Returns an error if `h_km` is not finite, is negative, or model data cannot
+/// be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/1511/v2_lat.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let pressure_hpa = itu_rs::standard_pressure_hpa(1.0)?;
+///
+/// assert!(pressure_hpa > 0.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn standard_pressure_hpa(h_km: f64) -> std::result::Result<f64, ItuError> {
     validate_nonnegative("h_km", h_km).map_err(ItuError::from)?;
     Ok(model().map_err(ItuError::from)?.standard_pressure_hpa(h_km))
 }
 
 /// Computes standard water-vapour density from ITU-R P.835.
+///
+/// This applies the P.835 exponential decrease of water-vapour density with
+/// height from a surface reference density.
+///
+/// # Parameters
+///
+/// - `h_km`: geometric height above mean sea level in kilometres. Must be
+///   non-negative.
+/// - `rho0_gm3`: surface water-vapour density in g/m^3. Must be non-negative.
+///
+/// # Returns
+///
+/// Water-vapour density at `h_km` in g/m^3.
+///
+/// # Errors
+///
+/// Returns an error if either input is not finite, if either input is negative,
+/// or if model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/1511/v2_lat.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let rho_gm3 = itu_rs::standard_water_vapour_density_gm3(1.0, 7.5)?;
+///
+/// assert!(rho_gm3 >= 0.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn standard_water_vapour_density_gm3(
     h_km: f64,
     rho0_gm3: f64,
@@ -1894,6 +2165,45 @@ pub fn standard_water_vapour_density_gm3(
 }
 
 /// Looks up surface water-vapour density from ITU-R P.836.
+///
+/// Surface water-vapour density is near-ground absolute humidity. The slant-path
+/// gas model uses this value when `SlantPathOptions::rho_gm3` is not supplied.
+///
+/// # Parameters
+///
+/// - `lat_deg`: station geodetic latitude in degrees, in `[-90, 90]`.
+/// - `lon_deg`: station geodetic longitude in degrees.
+/// - `p`: percentage of time exceeded, such as `1.0` for 1%. Must be positive.
+/// - `alt_km`: station altitude in kilometres. Finite values are accepted so
+///   sites below sea level can be represented.
+///
+/// # Returns
+///
+/// Surface water-vapour density in g/m^3.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/836/v6_lat.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let rho_gm3 = itu_rs::surface_water_vapour_density_gm3(
+///     45.4215, -75.6972, 1.0, 0.1,
+/// )?;
+///
+/// assert!(rho_gm3.is_finite());
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn surface_water_vapour_density_gm3(
     lat_deg: f64,
     lon_deg: f64,
@@ -1910,6 +2220,45 @@ pub fn surface_water_vapour_density_gm3(
 }
 
 /// Looks up total columnar water-vapour content from ITU-R P.836.
+///
+/// Total water vapour content is the vertically integrated water-vapour mass
+/// above the site. The approximate P.676 gas path uses this when
+/// `SlantPathOptions::v_t_kgm2` is not supplied.
+///
+/// # Parameters
+///
+/// - `lat_deg`: station geodetic latitude in degrees, in `[-90, 90]`.
+/// - `lon_deg`: station geodetic longitude in degrees.
+/// - `p`: percentage of time exceeded. Must be positive.
+/// - `alt_km`: station altitude in kilometres.
+///
+/// # Returns
+///
+/// Total columnar water-vapour content in kg/m^2.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/836/v6_lat.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let vapour_kgm2 = itu_rs::total_water_vapour_content_kgm2(
+///     45.4215, -75.6972, 1.0, 0.1,
+/// )?;
+///
+/// assert!(vapour_kgm2.is_finite());
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn total_water_vapour_content_kgm2(
     lat_deg: f64,
     lon_deg: f64,
@@ -1926,6 +2275,40 @@ pub fn total_water_vapour_content_kgm2(
 }
 
 /// Looks up rainfall rate exceeded for 0.01% of an average year from ITU-R P.837.
+///
+/// This reference rain rate, usually written `R_0.01`, anchors the P.618 rain
+/// fade calculation. Other time percentages are derived from it.
+///
+/// # Parameters
+///
+/// - `lat_deg`: station geodetic latitude in degrees, in `[-90, 90]`.
+/// - `lon_deg`: station geodetic longitude in degrees.
+///
+/// # Returns
+///
+/// Rainfall rate in mm/h exceeded for 0.01% of an average year.
+///
+/// # Errors
+///
+/// Returns an error if coordinates are invalid or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/837/v7_lat_r001.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let r001_mmh = itu_rs::rainfall_rate_r001_mmh(45.4215, -75.6972)?;
+///
+/// assert!(r001_mmh >= 0.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn rainfall_rate_r001_mmh(lat_deg: f64, lon_deg: f64) -> std::result::Result<f64, ItuError> {
     validate_lat_lon(lat_deg, lon_deg).map_err(ItuError::from)?;
     Ok(model()
@@ -1934,6 +2317,41 @@ pub fn rainfall_rate_r001_mmh(lat_deg: f64, lon_deg: f64) -> std::result::Result
 }
 
 /// Looks up rain height from ITU-R P.839.
+///
+/// Rain height approximates the altitude above which rain is no longer present.
+/// It is used with station height and elevation angle to determine the slant
+/// path length through rain.
+///
+/// # Parameters
+///
+/// - `lat_deg`: station geodetic latitude in degrees, in `[-90, 90]`.
+/// - `lon_deg`: station geodetic longitude in degrees.
+///
+/// # Returns
+///
+/// Rain height in kilometres above mean sea level.
+///
+/// # Errors
+///
+/// Returns an error if coordinates are invalid or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/839/v4_esalat.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let h_rain_km = itu_rs::rain_height_km(45.4215, -75.6972)?;
+///
+/// assert!(h_rain_km.is_finite());
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn rain_height_km(lat_deg: f64, lon_deg: f64) -> std::result::Result<f64, ItuError> {
     validate_lat_lon(lat_deg, lon_deg).map_err(ItuError::from)?;
     Ok(model()
@@ -1942,6 +2360,46 @@ pub fn rain_height_km(lat_deg: f64, lon_deg: f64) -> std::result::Result<f64, It
 }
 
 /// Computes ITU-R P.838 rain specific attenuation coefficients.
+///
+/// The returned `(k, alpha)` coefficients convert rainfall rate `R` to specific
+/// rain attenuation with `gamma_R = k * R^alpha`. Frequency, elevation, and
+/// polarization affect drop-shape and polarization coupling in the model.
+///
+/// # Parameters
+///
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `elevation_deg`: path elevation angle above the horizon in degrees, in
+///   `(0, 90)`.
+/// - `tau_deg`: polarization tilt angle in degrees, in `[0, 90]`.
+///
+/// # Returns
+///
+/// `(k, alpha)` P.838 coefficients for use with rainfall rate in mm/h.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/1511/v2_lat.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let (k, alpha) = itu_rs::rain_specific_attenuation_coefficients(
+///     12.0, 30.0, 45.0,
+/// )?;
+///
+/// assert!(k.is_finite());
+/// assert!(alpha.is_finite());
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn rain_specific_attenuation_coefficients(
     freq_ghz: f64,
     elevation_deg: f64,
@@ -1957,6 +2415,45 @@ pub fn rain_specific_attenuation_coefficients(
 }
 
 /// Computes ITU-R P.838 rain specific attenuation in dB/km.
+///
+/// This applies the P.838 relation `gamma_R = k * R^alpha` for a supplied
+/// rainfall rate and path geometry.
+///
+/// # Parameters
+///
+/// - `rainfall_rate_mmh`: rainfall rate in mm/h. Must be non-negative.
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `elevation_deg`: path elevation angle above the horizon in degrees, in
+///   `(0, 90)`.
+/// - `tau_deg`: polarization tilt angle in degrees, in `[0, 90]`.
+///
+/// # Returns
+///
+/// Specific rain attenuation in dB/km.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/1511/v2_lat.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let gamma_db_per_km = itu_rs::rain_specific_attenuation_db_per_km(
+///     28.0, 12.0, 30.0, 45.0,
+/// )?;
+///
+/// assert!(gamma_db_per_km >= 0.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn rain_specific_attenuation_db_per_km(
     rainfall_rate_mmh: f64,
     freq_ghz: f64,
@@ -1974,6 +2471,41 @@ pub fn rain_specific_attenuation_db_per_km(
 }
 
 /// Looks up reduced cloud liquid water content from ITU-R P.840.
+///
+/// Reduced cloud liquid water content is the cloud liquid column used by the
+/// P.840 cloud attenuation model for the requested time percentage.
+///
+/// # Parameters
+///
+/// - `lat_deg`: station geodetic latitude in degrees, in `[-90, 90]`.
+/// - `lon_deg`: station geodetic longitude in degrees.
+/// - `p`: percentage of time exceeded. Must be positive.
+///
+/// # Returns
+///
+/// Reduced cloud liquid water content in kg/m^2.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/840/v9_lat.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let lred_kgm2 = itu_rs::cloud_reduced_liquid_kgm2(45.4215, -75.6972, 1.0)?;
+///
+/// assert!(lred_kgm2 >= 0.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn cloud_reduced_liquid_kgm2(
     lat_deg: f64,
     lon_deg: f64,
@@ -1988,6 +2520,41 @@ pub fn cloud_reduced_liquid_kgm2(
 }
 
 /// Computes the P.840 cloud liquid-water mass absorption coefficient.
+///
+/// The coefficient describes how efficiently cloud liquid water absorbs radio
+/// waves at the supplied frequency before local temperature is applied by the
+/// full specific attenuation coefficient.
+///
+/// # Parameters
+///
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+///
+/// # Returns
+///
+/// Liquid-water mass absorption coefficient used by P.840.
+///
+/// # Errors
+///
+/// Returns an error if `freq_ghz` is not finite, is not positive, or model data
+/// cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/1511/v2_lat.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let coeff = itu_rs::cloud_liquid_mass_absorption_coefficient(12.0)?;
+///
+/// assert!(coeff.is_finite());
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn cloud_liquid_mass_absorption_coefficient(
     freq_ghz: f64,
 ) -> std::result::Result<f64, ItuError> {
@@ -1998,6 +2565,42 @@ pub fn cloud_liquid_mass_absorption_coefficient(
 }
 
 /// Computes the P.840 cloud specific attenuation coefficient.
+///
+/// This coefficient converts reduced liquid water content into cloud attenuation
+/// for a given radio frequency and cloud temperature.
+///
+/// # Parameters
+///
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `temp_c`: cloud temperature in degrees Celsius. Must be above absolute
+///   zero.
+///
+/// # Returns
+///
+/// Cloud specific attenuation coefficient in dB/km per g/m^3 as defined by
+/// P.840 for the implemented model.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/1511/v2_lat.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let coeff = itu_rs::cloud_specific_attenuation_coefficient(12.0, 0.0)?;
+///
+/// assert!(coeff.is_finite());
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn cloud_specific_attenuation_coefficient(
     freq_ghz: f64,
     temp_c: f64,
@@ -2018,6 +2621,48 @@ pub fn cloud_specific_attenuation_coefficient(
 }
 
 /// Computes cloud attenuation from ITU-R P.840.
+///
+/// Cloud attenuation is the path attenuation caused by liquid water in clouds
+/// along an Earth-space slant path. If `lred_kgm2` is not supplied, the P.840
+/// map is used for the requested site and time percentage.
+///
+/// # Parameters
+///
+/// - `lat_deg`: station geodetic latitude in degrees, in `[-90, 90]`.
+/// - `lon_deg`: station geodetic longitude in degrees.
+/// - `elevation_deg`: path elevation angle in degrees, in `(0, 90)`.
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `p`: percentage of time exceeded. Must be positive.
+/// - `lred_kgm2`: optional reduced cloud liquid water content in kg/m^2. When
+///   `None`, it is looked up from P.840.
+///
+/// # Returns
+///
+/// Cloud attenuation in dB.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/840/v9_lat.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let cloud_db = itu_rs::cloud_attenuation_db(
+///     45.4215, -75.6972, 30.0, 12.0, 1.0, None,
+/// )?;
+///
+/// assert!(cloud_db >= 0.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[allow(clippy::too_many_arguments)]
 pub fn cloud_attenuation_db(
     lat_deg: f64,
@@ -2044,6 +2689,42 @@ pub fn cloud_attenuation_db(
 }
 
 /// Computes wet-term radio refractivity from ITU-R P.453.
+///
+/// Wet-term refractivity is the water-vapour part of atmospheric radio
+/// refractivity. It is used by scintillation calculations and by atmospheric
+/// refractive-index estimates.
+///
+/// # Parameters
+///
+/// - `e_hpa`: water-vapour partial pressure in hPa. Must be non-negative.
+/// - `temp_c`: air temperature in degrees Celsius. Must be above absolute
+///   zero.
+///
+/// # Returns
+///
+/// Wet-term radio refractivity in N-units.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/1511/v2_lat.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let n_wet = itu_rs::wet_term_radio_refractivity(12.0, 15.0)?;
+///
+/// assert!(n_wet >= 0.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn wet_term_radio_refractivity(e_hpa: f64, temp_c: f64) -> std::result::Result<f64, ItuError> {
     validate_nonnegative("e_hpa", e_hpa)
         .and_then(|_| validate_finite("temp_c", temp_c))
@@ -2061,6 +2742,42 @@ pub fn wet_term_radio_refractivity(e_hpa: f64, temp_c: f64) -> std::result::Resu
 }
 
 /// Computes radio refractive index from ITU-R P.453.
+///
+/// This converts dry-air pressure, water-vapour pressure, and temperature into
+/// the dimensionless radio refractive index `n`. The value is close to `1.0`
+/// in the lower atmosphere.
+///
+/// # Parameters
+///
+/// - `pd_hpa`: dry-air partial pressure in hPa. Must be non-negative.
+/// - `e_hpa`: water-vapour partial pressure in hPa. Must be non-negative.
+/// - `temp_k`: absolute air temperature in kelvin. Must be positive.
+///
+/// # Returns
+///
+/// Dimensionless radio refractive index.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/1511/v2_lat.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let n = itu_rs::radio_refractive_index(1000.0, 12.0, 288.15)?;
+///
+/// assert!(n > 1.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn radio_refractive_index(
     pd_hpa: f64,
     e_hpa: f64,
@@ -2076,6 +2793,43 @@ pub fn radio_refractive_index(
 }
 
 /// Computes water-vapour pressure from ITU-R P.453.
+///
+/// This converts air temperature, total pressure, and relative humidity into
+/// water-vapour partial pressure. It is useful when supplying local
+/// scintillation meteorology instead of using map-derived wet refractivity.
+///
+/// # Parameters
+///
+/// - `temp_c`: air temperature in degrees Celsius. Must be above absolute
+///   zero.
+/// - `pressure_hpa`: total atmospheric pressure in hPa. Must be positive.
+/// - `humidity_percent`: relative humidity in percent, in `[0, 100]`.
+///
+/// # Returns
+///
+/// Water-vapour partial pressure in hPa.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/1511/v2_lat.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let e_hpa = itu_rs::water_vapour_pressure_hpa(15.0, 1000.0, 60.0)?;
+///
+/// assert!(e_hpa >= 0.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn water_vapour_pressure_hpa(
     temp_c: f64,
     pressure_hpa: f64,
@@ -2102,6 +2856,42 @@ pub fn water_vapour_pressure_hpa(
 }
 
 /// Looks up wet-term radio refractivity maps from ITU-R P.453.
+///
+/// This map lookup provides wet-term radio refractivity exceeded for a requested
+/// time percentage. Scintillation calculations use it when local humidity,
+/// temperature, and pressure are not supplied.
+///
+/// # Parameters
+///
+/// - `lat_deg`: station geodetic latitude in degrees, in `[-90, 90]`.
+/// - `lon_deg`: station geodetic longitude in degrees.
+/// - `p`: percentage of time exceeded. Must be positive.
+///
+/// # Returns
+///
+/// Wet-term radio refractivity in N-units.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/453/v13_lat_n.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let n_wet = itu_rs::map_wet_term_radio_refractivity(45.4215, -75.6972, 50.0)?;
+///
+/// assert!(n_wet.is_finite());
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn map_wet_term_radio_refractivity(
     lat_deg: f64,
     lon_deg: f64,
@@ -2116,6 +2906,43 @@ pub fn map_wet_term_radio_refractivity(
 }
 
 /// Computes dry-air specific attenuation from ITU-R P.676 in dB/km.
+///
+/// This is the oxygen and dry-air part of exact gaseous attenuation for a local
+/// atmospheric state. It does not include water-vapour line attenuation.
+///
+/// # Parameters
+///
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `pressure_hpa`: atmospheric pressure in hPa. Must be positive.
+/// - `rho_gm3`: water-vapour density in g/m^3. Must be non-negative because it
+///   contributes to line broadening even in the dry-air term.
+/// - `temp_k`: absolute air temperature in kelvin. Must be positive.
+///
+/// # Returns
+///
+/// Dry-air specific attenuation in dB/km.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/676/v13_lines_oxygen.txt")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let gamma0 = itu_rs::gamma0_exact_db_per_km(12.0, 1008.0, 7.5, 289.2)?;
+///
+/// assert!(gamma0 >= 0.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn gamma0_exact_db_per_km(
     freq_ghz: f64,
     pressure_hpa: f64,
@@ -2133,6 +2960,42 @@ pub fn gamma0_exact_db_per_km(
 }
 
 /// Computes water-vapour specific attenuation from ITU-R P.676 in dB/km.
+///
+/// This is the water-vapour line and continuum part of exact gaseous
+/// attenuation for a local atmospheric state.
+///
+/// # Parameters
+///
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `pressure_hpa`: atmospheric pressure in hPa. Must be positive.
+/// - `rho_gm3`: water-vapour density in g/m^3. Must be non-negative.
+/// - `temp_k`: absolute air temperature in kelvin. Must be positive.
+///
+/// # Returns
+///
+/// Water-vapour specific attenuation in dB/km.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/676/v13_lines_water_vapour.txt")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let gammaw = itu_rs::gammaw_exact_db_per_km(12.0, 1008.0, 7.5, 289.2)?;
+///
+/// assert!(gammaw >= 0.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn gammaw_exact_db_per_km(
     freq_ghz: f64,
     pressure_hpa: f64,
@@ -2150,6 +3013,42 @@ pub fn gammaw_exact_db_per_km(
 }
 
 /// Computes total specific gaseous attenuation from ITU-R P.676 in dB/km.
+///
+/// This is the sum of dry-air and water-vapour specific attenuation for a local
+/// atmospheric state.
+///
+/// # Parameters
+///
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `pressure_hpa`: atmospheric pressure in hPa. Must be positive.
+/// - `rho_gm3`: water-vapour density in g/m^3. Must be non-negative.
+/// - `temp_k`: absolute air temperature in kelvin. Must be positive.
+///
+/// # Returns
+///
+/// Total gaseous specific attenuation in dB/km.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/676/v13_lines_oxygen.txt")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let gamma = itu_rs::gamma_exact_db_per_km(12.0, 1008.0, 7.5, 289.2)?;
+///
+/// assert!(gamma >= 0.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn gamma_exact_db_per_km(
     freq_ghz: f64,
     pressure_hpa: f64,
@@ -2167,6 +3066,47 @@ pub fn gamma_exact_db_per_km(
 }
 
 /// Computes P.676 equivalent heights for dry air and water vapour.
+///
+/// Equivalent heights convert local specific gaseous attenuation into an
+/// approximate slant-path attenuation. The returned dry-air and water-vapour
+/// heights are used by the approximate P.676 path calculation.
+///
+/// # Parameters
+///
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `pressure_hpa`: atmospheric pressure in hPa. Must be positive.
+/// - `rho_gm3`: surface water-vapour density in g/m^3. Must be non-negative.
+/// - `temp_k`: absolute air temperature in kelvin. Must be positive.
+///
+/// # Returns
+///
+/// `(h0_km, hw_km)`, the dry-air and water-vapour equivalent heights in
+/// kilometres.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/676/v13_h0_coefficients.txt")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let (h0_km, hw_km) = itu_rs::slant_inclined_path_equivalent_height_km(
+///     12.0, 1008.0, 7.5, 289.2,
+/// )?;
+///
+/// assert!(h0_km.is_finite());
+/// assert!(hw_km.is_finite());
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn slant_inclined_path_equivalent_height_km(
     freq_ghz: f64,
     pressure_hpa: f64,
@@ -2184,6 +3124,42 @@ pub fn slant_inclined_path_equivalent_height_km(
 }
 
 /// Computes P.676 zenith water-vapour attenuation.
+///
+/// This estimates the water-vapour attenuation for a vertical path above a
+/// station. It is one input to the approximate gaseous slant-path attenuation.
+///
+/// # Parameters
+///
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `v_t_kgm2`: total columnar water-vapour content in kg/m^2. Must be
+///   non-negative.
+/// - `h_km`: station altitude in kilometres. Must be non-negative.
+///
+/// # Returns
+///
+/// Zenith water-vapour attenuation in dB.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/676/v13_h0_coefficients.txt")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let zenith_db = itu_rs::zenith_water_vapour_attenuation_db(12.0, 22.5, 0.4)?;
+///
+/// assert!(zenith_db >= 0.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn zenith_water_vapour_attenuation_db(
     freq_ghz: f64,
     v_t_kgm2: f64,
@@ -2199,6 +3175,53 @@ pub fn zenith_water_vapour_attenuation_db(
 }
 
 /// Computes gaseous attenuation on an Earth-space slant path from ITU-R P.676.
+///
+/// Gaseous attenuation is absorption by oxygen and water vapour along the
+/// Earth-space path. Use `exact = true` for the layer-integrated model or
+/// `exact = false` for the faster approximate model based on equivalent
+/// heights and zenith water-vapour attenuation.
+///
+/// # Parameters
+///
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `elevation_deg`: path elevation angle above the horizon in degrees, in
+///   `(0, 90)`.
+/// - `rho_gm3`: surface water-vapour density in g/m^3. Must be non-negative.
+/// - `pressure_hpa`: surface atmospheric pressure in hPa. Must be positive.
+/// - `temp_k`: surface air temperature in kelvin. Must be positive.
+/// - `v_t_kgm2`: total columnar water-vapour content in kg/m^2. Must be
+///   non-negative.
+/// - `h_km`: station altitude in kilometres. Must be non-negative.
+/// - `exact`: when `true`, use exact layer integration; when `false`, use the
+///   approximate slant-path method.
+///
+/// # Returns
+///
+/// Gaseous slant-path attenuation in dB.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/676/v13_lines_oxygen.txt")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let gas_db = itu_rs::gaseous_attenuation_slant_path_db(
+///     12.0, 30.0, 7.5, 1008.0, 289.2, 22.5, 0.4, false,
+/// )?;
+///
+/// assert!(gas_db >= 0.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[allow(clippy::too_many_arguments)]
 pub fn gaseous_attenuation_slant_path_db(
     freq_ghz: f64,
@@ -2233,6 +3256,53 @@ pub fn gaseous_attenuation_slant_path_db(
 }
 
 /// Computes rain attenuation from ITU-R P.618.
+///
+/// Rain attenuation is the fade contribution from precipitation along the
+/// Earth-space path. The model combines local rain rate, rain height, station
+/// height, path geometry, frequency, time percentage, and polarization.
+///
+/// # Parameters
+///
+/// - `lat_deg`: station geodetic latitude in degrees, in `[-90, 90]`.
+/// - `lon_deg`: station geodetic longitude in degrees.
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `elevation_deg`: path elevation angle in degrees, in `(0, 90)`.
+/// - `hs_km`: station altitude above mean sea level in kilometres. Any finite
+///   value is accepted.
+/// - `p`: percentage of time exceeded. Must be positive.
+/// - `r001_mmh`: optional rainfall rate exceeded for 0.01% of an average year
+///   in mm/h. When `None`, P.837 data are used.
+/// - `tau_deg`: polarization tilt angle in degrees, in `[0, 90]`.
+/// - `l_s_km`: optional slant-path length through rain in kilometres. When
+///   `None`, P.618 derives it from rain height and elevation.
+///
+/// # Returns
+///
+/// Rain attenuation in dB for the requested time percentage.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/837/v7_lat_r001.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let rain_db = itu_rs::rain_attenuation_db(
+///     45.4215, -75.6972, 12.0, 30.0, 0.4, 1.0, None, 45.0, None,
+/// )?;
+///
+/// assert!(rain_db >= 0.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[allow(clippy::too_many_arguments)]
 pub fn rain_attenuation_db(
     lat_deg: f64,
@@ -2316,6 +3386,52 @@ fn validate_scintillation_inputs(
 }
 
 /// Computes the P.618 scintillation standard deviation in dB.
+///
+/// This is the standard deviation of short-term tropospheric scintillation
+/// amplitude fluctuations before converting to a fade depth for a requested
+/// time percentage.
+///
+/// # Parameters
+///
+/// - `lat_deg`: station geodetic latitude in degrees, in `[-90, 90]`.
+/// - `lon_deg`: station geodetic longitude in degrees.
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `elevation_deg`: path elevation angle in degrees, in `(0, 90)`.
+/// - `dish_m`: physical antenna diameter in metres. Must be positive.
+/// - `eta`: aperture efficiency factor, in `(0, 1]`.
+/// - `temp_c`, `humidity_percent`, `pressure_hpa`: optional local meteorology.
+///   Supply all three together to compute wet refractivity from local
+///   conditions, or supply all as `None` to use P.453 map data.
+/// - `h_l_m`: turbulent layer height in metres. Must be positive.
+///
+/// # Returns
+///
+/// Scintillation standard deviation in dB.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation, if only part of the optional
+/// meteorology set is supplied, or if model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/453/v13_lat_n.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let sigma_db = itu_rs::scintillation_sigma_db(
+///     45.4215, -75.6972, 12.0, 30.0, 1.2, 0.5, None, None, None, 1000.0,
+/// )?;
+///
+/// assert!(sigma_db >= 0.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[allow(clippy::too_many_arguments)]
 pub fn scintillation_sigma_db(
     lat_deg: f64,
@@ -2357,6 +3473,53 @@ pub fn scintillation_sigma_db(
 }
 
 /// Computes scintillation attenuation from ITU-R P.618.
+///
+/// This converts the scintillation standard deviation into an attenuation
+/// exceeded for the requested time percentage. It represents the fade
+/// contribution from tropospheric turbulence.
+///
+/// # Parameters
+///
+/// - `lat_deg`: station geodetic latitude in degrees, in `[-90, 90]`.
+/// - `lon_deg`: station geodetic longitude in degrees.
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `elevation_deg`: path elevation angle in degrees, in `(0, 90)`.
+/// - `p`: percentage of time exceeded. Must be positive.
+/// - `dish_m`: physical antenna diameter in metres. Must be positive.
+/// - `eta`: aperture efficiency factor, in `(0, 1]`.
+/// - `temp_c`, `humidity_percent`, `pressure_hpa`: optional local meteorology.
+///   Supply all three together, or supply all as `None` to use P.453 map data.
+/// - `h_l_m`: turbulent layer height in metres. Must be positive.
+///
+/// # Returns
+///
+/// Scintillation attenuation in dB.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation, if only part of the optional
+/// meteorology set is supplied, or if model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/453/v13_lat_n.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let scint_db = itu_rs::scintillation_attenuation_db(
+///     45.4215, -75.6972, 12.0, 30.0, 1.0, 1.2, 0.5,
+///     None, None, None, 1000.0,
+/// )?;
+///
+/// assert!(scint_db >= 0.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[allow(clippy::too_many_arguments)]
 pub fn scintillation_attenuation_db(
     lat_deg: f64,
@@ -2410,13 +3573,25 @@ pub fn scintillation_attenuation_db(
 /// slant-path attenuation path, but disables rain, cloud, and scintillation
 /// contributions.
 ///
-/// # Arguments
+/// # Parameters
 ///
-/// - `lat_deg`, `lon_deg`: site latitude and longitude in degrees.
-/// - `freq_ghz`: carrier frequency in GHz.
-/// - `elevation_deg`: elevation angle in degrees, in the open interval `(0, 90)`.
-/// - `p`: percentage of time exceeded.
-/// - `d_m`: antenna diameter in metres.
+/// - `lat_deg`: station geodetic latitude in degrees, in `[-90, 90]`.
+/// - `lon_deg`: station geodetic longitude in degrees.
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `elevation_deg`: path elevation angle above the horizon in degrees, in
+///   `(0, 90)`.
+/// - `p`: percentage of time exceeded. Must be positive.
+/// - `d_m`: physical antenna diameter in metres. It is accepted for API
+///   compatibility with the full slant-path call and must be positive, but
+///   gas-only attenuation does not use antenna size physically.
+///
+/// # Returns
+///
+/// Gaseous attenuation in dB.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
 ///
 /// # Example
 ///
@@ -2465,6 +3640,28 @@ pub fn gas_attenuation_default(
 /// Elevation values are validated exactly. Use only values in the open interval
 /// `(0, 90)`.
 ///
+/// # Parameters
+///
+/// - `lat_deg`: station geodetic latitude in degrees, in `[-90, 90]`.
+/// - `lon_deg`: station geodetic longitude in degrees.
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `elevation_deg`: slice of path elevation angles in degrees. Every value
+///   must be in `(0, 90)`.
+/// - `p`: percentage of time exceeded. Must be positive.
+/// - `d_m`: physical antenna diameter in metres. It is validated for
+///   compatibility with the full slant-path API but is not used by gas-only
+///   attenuation.
+///
+/// # Returns
+///
+/// One gaseous attenuation value in dB for each supplied elevation angle, in
+/// the same order as the input slice.
+///
+/// # Errors
+///
+/// Returns an error if any input fails validation or model data cannot be
+/// loaded.
+///
 /// # Example
 ///
 /// ```
@@ -2500,6 +3697,46 @@ pub fn gas_attenuation_default_many(
 ///
 /// This is retained as a compatibility alias for callers that want the name to
 /// emphasize strict validation.
+///
+/// # Parameters
+///
+/// - `lat_deg`: station geodetic latitude in degrees, in `[-90, 90]`.
+/// - `lon_deg`: station geodetic longitude in degrees.
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `elevation_deg`: slice of path elevation angles in degrees. Every value
+///   must be in `(0, 90)`.
+/// - `p`: percentage of time exceeded. Must be positive.
+/// - `d_m`: physical antenna diameter in metres. Must be positive.
+///
+/// # Returns
+///
+/// One gaseous attenuation value in dB for each supplied elevation angle.
+///
+/// # Errors
+///
+/// Returns an error if any input fails validation or model data cannot be
+/// loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// #             .join("data/1511/v2_lat.npz")
+/// #             .exists()
+/// # }
+/// # if data_available() {
+/// let elevations = [10.0, 45.0];
+/// let gas = itu_rs::gas_attenuation_default_many_checked(
+///     45.4215, -75.6972, 12.0, &elevations, 0.1, 1.2,
+/// )?;
+///
+/// assert_eq!(gas.len(), elevations.len());
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn gas_attenuation_default_many_checked(
     lat_deg: f64,
     lon_deg: f64,
@@ -2526,6 +3763,31 @@ pub fn gas_attenuation_default_many_checked(
 /// scintillation, and total attenuation in dB. Use [`SlantPathOptions`] to
 /// override environmental inputs, select exact gaseous attenuation, or disable
 /// individual components.
+///
+/// # Parameters
+///
+/// - `lat_deg`: Earth station geodetic latitude in degrees, in `[-90, 90]`.
+/// - `lon_deg`: Earth station geodetic longitude in degrees.
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `elevation_deg`: link elevation angle above the local horizon in degrees,
+///   in `(0, 90)`.
+/// - `p`: percentage of time attenuation is exceeded. Must be positive; for
+///   example, `0.1` means 0.1% of an average year.
+/// - `d_m`: physical antenna diameter in metres. It affects scintillation fade
+///   through aperture averaging and must be positive.
+/// - `options`: environmental overrides and contribution switches. Defaults
+///   look up missing environmental values from ITU-R maps and include all
+///   supported components.
+///
+/// # Returns
+///
+/// A [`SlantPathContributions`] value containing gas, cloud, rain,
+/// scintillation, and combined total attenuation in dB.
+///
+/// # Errors
+///
+/// Returns an error if inputs or options fail validation, or if required model
+/// data cannot be loaded.
 ///
 /// # Example
 ///
@@ -2572,6 +3834,27 @@ pub fn atmospheric_attenuation_slant_path(
 ///
 /// This is the preferred API when sweeping elevation angles for a fixed site,
 /// frequency, time percentage, antenna diameter, and option set.
+///
+/// # Parameters
+///
+/// - `lat_deg`: Earth station geodetic latitude in degrees, in `[-90, 90]`.
+/// - `lon_deg`: Earth station geodetic longitude in degrees.
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `elevation_deg`: slice of link elevation angles in degrees. Every value
+///   must be in `(0, 90)`.
+/// - `p`: percentage of time attenuation is exceeded. Must be positive.
+/// - `d_m`: physical antenna diameter in metres. Must be positive.
+/// - `options`: environmental overrides and contribution switches applied to
+///   every elevation angle.
+///
+/// # Returns
+///
+/// One [`SlantPathContributions`] value per elevation angle, in input order.
+///
+/// # Errors
+///
+/// Returns an error if common inputs, options, or any elevation angle fail
+/// validation, or if required model data cannot be loaded.
 ///
 /// # Example
 ///
