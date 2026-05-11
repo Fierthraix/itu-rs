@@ -228,6 +228,8 @@ the Rust port. Results are means over repeated runs.
 | Batched default slant path, 4 locations x 169 elevations | `0.195419 s` | `0.005600 s` | `34.89x` | `7.105e-15 dB` |
 | Exact scalar slant path with explicit overrides | `0.140981 s` | `0.002637 s` | `53.46x` | `0.000e+00 dB` |
 
+![Absolute error box plot against python-itu-r](docs/images/python-parity-error-boxplot.png)
+
 Run the Rust-only Criterion benchmarks with:
 
 ```sh
