@@ -63,8 +63,8 @@ fn bench_exact_scalar(c: &mut Criterion) {
     });
 }
 
-fn bench_easy_win_scalar_apis(c: &mut Criterion) {
-    c.bench_function("easy_win_scalar_api_set", |b| {
+fn bench_scalar_recommendation_apis(c: &mut Criterion) {
+    c.bench_function("scalar_recommendation_api_set", |b| {
         b.iter(|| {
             let lat = black_box(45.4215);
             let lon = black_box(-75.6972);
@@ -91,6 +91,6 @@ criterion_group!(
     benches,
     bench_default_many,
     bench_exact_scalar,
-    bench_easy_win_scalar_apis
+    bench_scalar_recommendation_apis
 );
 criterion_main!(benches);

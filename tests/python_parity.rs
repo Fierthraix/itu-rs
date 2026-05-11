@@ -23,7 +23,7 @@ fn assert_close(actual: f64, expected: f64, tolerance: f64) {
 }
 
 #[test]
-fn new_api_reference_values_match_python_itu_r() {
+fn scalar_recommendation_reference_values_match_python_itu_r() {
     if !data_available() {
         return;
     }

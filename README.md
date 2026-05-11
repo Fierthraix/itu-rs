@@ -135,6 +135,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+Use recommendation helper APIs directly when only one part of the propagation
+model is needed:
+
+```rust
+use itu_rs::{rainfall_rate_mmh, surface_month_mean_temperature_k, zero_isotherm_height_km};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let lat = 45.4215;
+    let lon = -75.6972;
+
+    let january_temp_k = surface_month_mean_temperature_k(lat, lon, 1)?;
+    let rain_rate_mmh = rainfall_rate_mmh(lat, lon, 0.1)?;
+    let h0_km = zero_isotherm_height_km(lat, lon)?;
+
+    println!("{january_temp_k:.2} K, {rain_rate_mmh:.2} mm/h, {h0_km:.2} km");
+    Ok(())
+}
+```
+
 ## Supported Coverage
 
 | [`python-itu-r`](https://github.com/inigodelportillo/ITU-Rpy) function or feature |  | Status |
