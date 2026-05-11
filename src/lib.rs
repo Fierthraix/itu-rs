@@ -705,7 +705,7 @@ impl IturModel {
             month_temp_1510_v1.push(LazyRegularGrid2D::new(
                 "1510/v1_lat.npz",
                 "1510/v1_lon.npz",
-                &format!("1510/v1_t_month{month:02}.npz"),
+                format!("1510/v1_t_month{month:02}.npz"),
                 true,
             ));
         }
@@ -726,7 +726,7 @@ impl IturModel {
                 LazyRegularGrid2D::new(
                     "836/v6_lat.npz",
                     "836/v6_lon.npz",
-                    &format!("836/v6_rho_{suffix}.npz"),
+                    format!("836/v6_rho_{suffix}.npz"),
                     false,
                 ),
             ));
@@ -735,7 +735,7 @@ impl IturModel {
                 LazyRegularGrid2D::new(
                     "836/v6_lat.npz",
                     "836/v6_lon.npz",
-                    &format!("836/v6_v_{suffix}.npz"),
+                    format!("836/v6_v_{suffix}.npz"),
                     false,
                 ),
             ));
@@ -744,7 +744,7 @@ impl IturModel {
                 LazyRegularGrid2D::new(
                     "836/v6_lat.npz",
                     "836/v6_lon.npz",
-                    &format!("836/v6_vsch_{suffix}.npz"),
+                    format!("836/v6_vsch_{suffix}.npz"),
                     false,
                 ),
             ));
@@ -764,7 +764,7 @@ impl IturModel {
             rainfall_mt_837_v7.push(LazyRegularGrid2D::new(
                 "837/v7_lat_mt.npz",
                 "837/v7_lon_mt.npz",
-                &format!("837/v7_mt_month{month:02}.npz"),
+                format!("837/v7_mt_month{month:02}.npz"),
                 true,
             ));
         }
@@ -783,7 +783,7 @@ impl IturModel {
                 LazyRegularGrid2D::new(
                     "840/v9_lat.npz",
                     "840/v9_lon.npz",
-                    &format!("840/v9_l_{stem}.npz"),
+                    format!("840/v9_l_{stem}.npz"),
                     false,
                 ),
             ));
@@ -804,7 +804,7 @@ impl IturModel {
                 LazyRegularGrid2D::new(
                     "453/v13_lat_n.npz",
                     "453/v13_lon_n.npz",
-                    &format!("453/v13_nwet_annual_{suffix}.npz"),
+                    format!("453/v13_nwet_annual_{suffix}.npz"),
                     true,
                 ),
             ));
@@ -819,7 +819,7 @@ impl IturModel {
                 LazyRegularGrid2D::new(
                     "453/v12_lat0d75.npz",
                     "453/v12_lon0d75.npz",
-                    &format!("453/v12_dn65m_{suffix}_v1.npz"),
+                    format!("453/v12_dn65m_{suffix}_v1.npz"),
                     false,
                 ),
             ));
@@ -828,7 +828,7 @@ impl IturModel {
                 LazyRegularGrid2D::new(
                     "453/v12_lat0d75.npz",
                     "453/v12_lon0d75.npz",
-                    &format!("453/v12_dn_{suffix}_v1.npz"),
+                    format!("453/v12_dn_{suffix}_v1.npz"),
                     false,
                 ),
             ));
@@ -2628,10 +2628,10 @@ fn gas_attenuation_default_many_clamped(
 /// ```
 pub fn topographic_altitude_km(lat_deg: f64, lon_deg: f64) -> std::result::Result<f64, ItuError> {
     validate_lat_lon(lat_deg, lon_deg).map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .topographic_altitude_km(lat_deg, lon_deg)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Looks up annual mean surface temperature from ITU-R [P.1510](https://www.itu.int/rec/R-REC-P.1510).
@@ -2674,10 +2674,10 @@ pub fn surface_mean_temperature_k(
     lon_deg: f64,
 ) -> std::result::Result<f64, ItuError> {
     validate_lat_lon(lat_deg, lon_deg).map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .surface_mean_temperature_k(lat_deg, lon_deg)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Looks up monthly mean surface temperature from ITU-R [P.1510](https://www.itu.int/rec/R-REC-P.1510).
@@ -2726,10 +2726,10 @@ pub fn surface_month_mean_temperature_k(
     validate_lat_lon(lat_deg, lon_deg)
         .and_then(|_| validate_month(month))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .surface_month_mean_temperature_k(lat_deg, lon_deg, month)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Computes standard-atmosphere temperature from ITU-R [P.835](https://www.itu.int/rec/R-REC-P.835).
@@ -2916,10 +2916,10 @@ pub fn surface_water_vapour_density_gm3(
         .and_then(|_| validate_p(p))
         .and_then(|_| validate_finite("alt_km", alt_km))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .surface_water_vapour_density_gm3(lat_deg, lon_deg, p, alt_km)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Looks up total columnar water-vapour content from ITU-R [P.836](https://www.itu.int/rec/R-REC-P.836).
@@ -2972,10 +2972,10 @@ pub fn total_water_vapour_content_kgm2(
         .and_then(|_| validate_p(p))
         .and_then(|_| validate_finite("alt_km", alt_km))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .total_water_vapour_content_kgm2(lat_deg, lon_deg, p, alt_km)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Looks up rainfall rate exceeded for 0.01% of an average year from ITU-R [P.837](https://www.itu.int/rec/R-REC-P.837).
@@ -3015,10 +3015,10 @@ pub fn total_water_vapour_content_kgm2(
 /// ```
 pub fn rainfall_rate_r001_mmh(lat_deg: f64, lon_deg: f64) -> std::result::Result<f64, ItuError> {
     validate_lat_lon(lat_deg, lon_deg).map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .rainfall_rate_r001_mmh(lat_deg, lon_deg)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Computes annual rain probability from ITU-R [P.837](https://www.itu.int/rec/R-REC-P.837).
@@ -3062,10 +3062,10 @@ pub fn rainfall_probability_percent(
     lon_deg: f64,
 ) -> std::result::Result<f64, ItuError> {
     validate_lat_lon(lat_deg, lon_deg).map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .rainfall_probability_percent(lat_deg, lon_deg)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Computes rainfall rate exceeded for a requested time percentage from ITU-R [P.837](https://www.itu.int/rec/R-REC-P.837).
@@ -3109,10 +3109,10 @@ pub fn rainfall_rate_mmh(lat_deg: f64, lon_deg: f64, p: f64) -> std::result::Res
     validate_lat_lon(lat_deg, lon_deg)
         .and_then(|_| validate_p(p))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .rainfall_rate_mmh(lat_deg, lon_deg, p)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Inverts ITU-R [P.837](https://www.itu.int/rec/R-REC-P.837) rainfall-rate statistics.
@@ -3159,10 +3159,10 @@ pub fn unavailability_from_rainfall_rate_percent(
     validate_lat_lon(lat_deg, lon_deg)
         .and_then(|_| validate_nonnegative("rainfall_rate_mmh", rainfall_rate_mmh))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .unavailability_from_rainfall_rate_percent(lat_deg, lon_deg, rainfall_rate_mmh)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Looks up zero-degree isotherm height from ITU-R [P.839](https://www.itu.int/rec/R-REC-P.839).
@@ -3202,10 +3202,10 @@ pub fn unavailability_from_rainfall_rate_percent(
 /// ```
 pub fn zero_isotherm_height_km(lat_deg: f64, lon_deg: f64) -> std::result::Result<f64, ItuError> {
     validate_lat_lon(lat_deg, lon_deg).map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .zero_isotherm_height_km(lat_deg, lon_deg)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Looks up rain height from ITU-R [P.839](https://www.itu.int/rec/R-REC-P.839).
@@ -3246,10 +3246,10 @@ pub fn zero_isotherm_height_km(lat_deg: f64, lon_deg: f64) -> std::result::Resul
 /// ```
 pub fn rain_height_km(lat_deg: f64, lon_deg: f64) -> std::result::Result<f64, ItuError> {
     validate_lat_lon(lat_deg, lon_deg).map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .rain_height_km(lat_deg, lon_deg)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Computes ITU-R [P.838](https://www.itu.int/rec/R-REC-P.838) rain specific attenuation coefficients.
@@ -3407,10 +3407,10 @@ pub fn cloud_reduced_liquid_kgm2(
     validate_lat_lon(lat_deg, lon_deg)
         .and_then(|_| validate_p(p))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .cloud_reduced_liquid_kgm2(lat_deg, lon_deg, p)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Computes the [P.840](https://www.itu.int/rec/R-REC-P.840) cloud liquid-water mass absorption coefficient.
@@ -3572,10 +3572,10 @@ pub fn cloud_attenuation_db(
         .and_then(|_| validate_p(p))
         .and_then(|_| validate_optional_nonnegative("lred_kgm2", lred_kgm2))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .cloud_attenuation_db(lat_deg, lon_deg, elevation_deg, freq_ghz, p, lred_kgm2)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Looks up [P.840](https://www.itu.int/rec/R-REC-P.840) lognormal cloud liquid-water distribution coefficients.
@@ -3623,10 +3623,10 @@ pub fn lognormal_approximation_coefficients(
     lon_deg: f64,
 ) -> std::result::Result<(f64, f64, f64), ItuError> {
     validate_lat_lon(lat_deg, lon_deg).map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .lognormal_approximation_coefficients(lat_deg, lon_deg)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Computes cloud attenuation with the [P.840](https://www.itu.int/rec/R-REC-P.840) lognormal approximation.
@@ -3683,10 +3683,10 @@ pub fn cloud_attenuation_lognormal_db(
         .and_then(|_| validate_positive("freq_ghz", freq_ghz))
         .and_then(|_| validate_p(p))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .cloud_attenuation_lognormal_db(lat_deg, lon_deg, elevation_deg, freq_ghz, p)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Computes wet-term radio refractivity from ITU-R [P.453](https://www.itu.int/rec/R-REC-P.453).
@@ -3989,10 +3989,10 @@ pub fn map_wet_term_radio_refractivity(
     validate_lat_lon(lat_deg, lon_deg)
         .and_then(|_| validate_p(p))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .map_wet_term_radio_refractivity(lat_deg, lon_deg, p)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Looks up the [P.453](https://www.itu.int/rec/R-REC-P.453) refractivity gradient exceeded in the lowest 65 m.
@@ -4037,10 +4037,10 @@ pub fn dn65(lat_deg: f64, lon_deg: f64, p: f64) -> std::result::Result<f64, ItuE
     validate_lat_lon(lat_deg, lon_deg)
         .and_then(|_| validate_supported_p("p", p, &P453_DN_LEVELS))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .dn65(lat_deg, lon_deg, p)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Looks up the [P.453](https://www.itu.int/rec/R-REC-P.453) refractivity gradient exceeded over the lowest 1 km.
@@ -4085,10 +4085,10 @@ pub fn dn1(lat_deg: f64, lon_deg: f64, p: f64) -> std::result::Result<f64, ItuEr
     validate_lat_lon(lat_deg, lon_deg)
         .and_then(|_| validate_supported_p("p", p, &P453_DN_LEVELS))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .dn1(lat_deg, lon_deg, p)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Computes inter-annual variability from ITU-R [P.678](https://www.itu.int/rec/R-REC-P.678).
@@ -4137,10 +4137,10 @@ pub fn inter_annual_variability(
     validate_p678_fraction("p_fraction", p_fraction)
         .and_then(|_| validate_lat_lon(lat_deg, lon_deg))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .inter_annual_variability(p_fraction, lat_deg, lon_deg)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Computes exceedance risk from ITU-R [P.678](https://www.itu.int/rec/R-REC-P.678).
@@ -4193,10 +4193,10 @@ pub fn risk_of_exceedance(
         .and_then(|_| validate_probability_fraction("pr_fraction", pr_fraction))
         .and_then(|_| validate_lat_lon(lat_deg, lon_deg))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .risk_of_exceedance(p_fraction, pr_fraction, lat_deg, lon_deg)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Computes dry-air specific attenuation from ITU-R [P.676](https://www.itu.int/rec/R-REC-P.676) in dB/km.
@@ -4248,10 +4248,10 @@ pub fn gamma0_exact_db_per_km(
         .and_then(|_| validate_nonnegative("rho_gm3", rho_gm3))
         .and_then(|_| validate_positive("temp_k", temp_k))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .gamma0_exact_v13(freq_ghz, pressure_hpa, rho_gm3, temp_k)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Computes water-vapour specific attenuation from ITU-R [P.676](https://www.itu.int/rec/R-REC-P.676) in dB/km.
@@ -4302,10 +4302,10 @@ pub fn gammaw_exact_db_per_km(
         .and_then(|_| validate_nonnegative("rho_gm3", rho_gm3))
         .and_then(|_| validate_positive("temp_k", temp_k))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .gammaw_exact_v13(freq_ghz, pressure_hpa, rho_gm3, temp_k)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Computes total specific gaseous attenuation from ITU-R [P.676](https://www.itu.int/rec/R-REC-P.676) in dB/km.
@@ -4356,10 +4356,10 @@ pub fn gamma_exact_db_per_km(
         .and_then(|_| validate_nonnegative("rho_gm3", rho_gm3))
         .and_then(|_| validate_positive("temp_k", temp_k))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .gamma_exact_v13(freq_ghz, pressure_hpa, rho_gm3, temp_k)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Computes [P.676](https://www.itu.int/rec/R-REC-P.676) equivalent heights for dry air and water vapour.
@@ -4415,10 +4415,10 @@ pub fn slant_inclined_path_equivalent_height_km(
         .and_then(|_| validate_nonnegative("rho_gm3", rho_gm3))
         .and_then(|_| validate_positive("temp_k", temp_k))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .slant_inclined_path_equivalent_height_v13(freq_ghz, pressure_hpa, rho_gm3, temp_k)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Computes [P.676](https://www.itu.int/rec/R-REC-P.676) zenith water-vapour attenuation.
@@ -4467,10 +4467,10 @@ pub fn zenith_water_vapour_attenuation_db(
         .and_then(|_| validate_nonnegative("v_t_kgm2", v_t_kgm2))
         .and_then(|_| validate_nonnegative("h_km", h_km))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .zenith_water_vapour_attenuation_db(freq_ghz, v_t_kgm2, h_km)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Computes gaseous attenuation on an Earth-space slant path from ITU-R [P.676](https://www.itu.int/rec/R-REC-P.676).
@@ -4540,7 +4540,7 @@ pub fn gaseous_attenuation_slant_path_db(
         .and_then(|_| validate_nonnegative("v_t_kgm2", v_t_kgm2))
         .and_then(|_| validate_nonnegative("h_km", h_km))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .gaseous_attenuation_slant_path_v13(
             freq_ghz,
@@ -4552,7 +4552,7 @@ pub fn gaseous_attenuation_slant_path_db(
             h_km,
             exact,
         )
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Computes rain attenuation from ITU-R [P.618](https://www.itu.int/rec/R-REC-P.618).
@@ -4624,7 +4624,7 @@ pub fn rain_attenuation_db(
         .and_then(|_| validate_tau_deg(tau_deg))
         .and_then(|_| validate_optional_positive("l_s_km", l_s_km))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .rain_attenuation_db(
             lat_deg,
@@ -4637,7 +4637,7 @@ pub fn rain_attenuation_db(
             tau_deg,
             l_s_km,
         )
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -4761,7 +4761,7 @@ pub fn scintillation_sigma_db(
         h_l_m,
     )
     .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .scintillation_sigma_db(
             lat_deg,
@@ -4775,7 +4775,7 @@ pub fn scintillation_sigma_db(
             pressure_hpa,
             h_l_m,
         )
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Computes scintillation attenuation from ITU-R [P.618](https://www.itu.int/rec/R-REC-P.618).
@@ -4856,7 +4856,7 @@ pub fn scintillation_attenuation_db(
             )
         })
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .scintillation_attenuation_db(
             lat_deg,
@@ -4871,7 +4871,7 @@ pub fn scintillation_attenuation_db(
             pressure_hpa,
             h_l_m,
         )
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Computes gas-only atmospheric attenuation for one elevation angle.
@@ -4930,10 +4930,10 @@ pub fn gas_attenuation_default(
     validate_common_inputs(lat_deg, lon_deg, freq_ghz, p, d_m)
         .and_then(|_| validate_elevation_deg(elevation_deg))
         .map_err(ItuError::from)?;
-    Ok(model()
+    model()
         .map_err(ItuError::from)?
         .atmospheric_attenuation_default_gas_only(lat_deg, lon_deg, freq_ghz, elevation_deg, p, d_m)
-        .map_err(ItuError::from)?)
+        .map_err(ItuError::from)
 }
 
 /// Computes gas-only atmospheric attenuation for multiple elevation angles.
