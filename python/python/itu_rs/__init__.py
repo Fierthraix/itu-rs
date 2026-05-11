@@ -67,7 +67,7 @@ from ._native import (
     zero_isotherm_height_km,
 )
 
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 
 __all__ = [
     "HydrometeorType",

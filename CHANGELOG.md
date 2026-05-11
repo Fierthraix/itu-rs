@@ -9,6 +9,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 No user-facing changes yet.
 
+## [1.2.1] - 2026-05-11
+
+### Fixed
+
+- Reduced Python wheel sizes by downloading and caching ITU-R data grids at
+  runtime instead of embedding them in each wheel.
+
 ## [1.2.0] - 2026-05-11
 
 ### Added

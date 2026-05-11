@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "itu-rs"
-version = "1.2.0"
+version = "1.2.1"
 description = "Python bindings for selected ITU-R P-series atmospheric propagation models"
 readme = "README.md"
 requires-python = ">=3.9"
