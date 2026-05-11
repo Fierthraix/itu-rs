@@ -1,38 +1,31 @@
 # itu-rs
 
-`itu-rs` is a Rust implementation of selected ITU-R P-series atmospheric
-propagation routines, ported from `python-itu-r` for fast Earth-space slant-path
-attenuation calculations.
-
-This first crate is intentionally scoped: it supports the propagation features
-needed by the current Rust port, not the full `python-itu-r` API surface.
+`itu-rs` is a Rust implementation of selected [ITU-R P-series](https://www.itu.int/rec/R-REC-p)
+atmospheric propagation routines, ported from
+[`python-itu-r`](https://github.com/inigodelportillo/ITU-Rpy) for fast Earth-space slant-path attenuation
+calculations.
 
 ## Data Files
 
-The working repository checkout includes the required ITU-R grids under
+The working repository checkout includes the required [ITU-R](https://www.itu.int/pub/R-REC) grids under
 `itu-rs/data`, so local development is self-contained.
 
-The crates.io package excludes those grids because the compressed data package is
-larger than the crates.io `.crate` upload limit. For published-package use, set
-`ITU_RS_DATA_DIR` to a directory containing the same `itur/data` layout copied
-from `python-itu-r`:
-
-```powershell
-$env:ITU_RS_DATA_DIR = "C:\path\to\ITU-Rpy\itur\data"
-```
-
-Alternatively, enable the opt-in `data` feature to fetch and compile the grid
-files into your build:
+For published-package use, the recommended path is to enable the `data` feature:
 
 ```toml
 [dependencies]
 itu-rs = { version = "1", features = ["data"] }
 ```
 
-With `features = ["data"]`, the build script first uses local `data/` files when
-they are present. Otherwise it downloads a source archive, extracts `data/**`,
-and embeds those bytes into the compiled crate. The default download URL points
-at the `itu-rs-data-v1.zip` GitHub Release asset and verifies its pinned SHA256.
+With `features = ["data"]`, no runtime configuration is required. The build
+script first uses local `data/` files when they are present; otherwise it
+downloads a source archive, extracts `data/**`, and embeds those bytes into the
+compiled crate. The default download URL points at the `itu-rs-data-v1.zip`
+GitHub Release asset and verifies its pinned SHA256.
+
+The raw [ITU-R](https://www.itu.int/pub/R-REC) grids are too large to include directly in the crates.io package
+because crates.io limits the size of uploaded `.crate` archives.
+
 Override it with `ITU_RS_DATA_URL`, use a local archive with
 `ITU_RS_DATA_ARCHIVE`, set `ITU_RS_DATA_CACHE` for a persistent download cache,
 and set `ITU_RS_DATA_SHA256` to require a different checksum.
@@ -40,6 +33,24 @@ and set `ITU_RS_DATA_SHA256` to require a different checksum.
 The feature is intentionally opt-in because it makes builds network-dependent
 when local data is unavailable and increases the final binary size by roughly the
 compressed grid data size.
+
+### Manual data directory
+
+If you do not want automatic data embedding, set `ITU_RS_DATA_DIR` to a
+directory containing the same `itur/data` layout copied from
+[`python-itu-r`](https://github.com/inigodelportillo/ITU-Rpy).
+
+Unix shells:
+
+```sh
+export ITU_RS_DATA_DIR=/path/to/ITU-Rpy/itur/data
+```
+
+Windows PowerShell:
+
+```powershell
+$env:ITU_RS_DATA_DIR = "C:\path\to\ITU-Rpy\itur\data"
+```
 
 ## Example
 
@@ -115,39 +126,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Supported Coverage
 
-| python-itu-r function or feature | Rust support | Status |
+| [`python-itu-r`](https://github.com/inigodelportillo/ITU-Rpy) function or feature |  | Status |
 |---|---:|---|
 | `itur.atmospheric_attenuation_slant_path` | ✅ | Public API |
 | Batched slant-path attenuation over elevation angles | ✅ | Public API |
 | Gas-only default slant-path attenuation helper | ✅ | Public API |
-| P.676 gaseous attenuation, exact and approximate paths | ✅ | Public scalar APIs |
-| P.618 rain attenuation contribution | ✅ | Public scalar API |
-| P.618 scintillation attenuation contribution | ✅ | Public scalar APIs |
-| P.840 cloud attenuation contribution | ✅ | Public scalar APIs |
-| P.1511 topographic altitude lookup | ✅ | Public scalar API |
-| P.1510 surface mean temperature lookup | ✅ | Public scalar API |
-| P.836 water vapour density and total content lookup | ✅ | Public scalar APIs |
-| P.837 rainfall rate lookup | ✅ | Public scalar API |
-| P.839 rain height lookup | ✅ | Public scalar API |
-| P.453 wet-term radio refractivity lookup | ✅ | Public scalar APIs |
-| P.835 reference atmosphere | ✅ | Public scalar APIs |
-| P.838 rain specific attenuation | ✅ | Public scalar APIs |
-| Full `python-itu-r` package API | ❌ | Out of scope for this crate |
-
-## Long-Term Goals
-
-The long-term goal is full ITU-R recommendation coverage, with Rust
-implementations of the propagation models exposed through a stable native API.
-
-Another goal is Python exposure as an installable Python package, likely through
-PyO3 or a similar binding layer. That package should make it possible to compare
-the Rust implementation directly against Python workflows and measure whether
-the Rust core materially speeds up common `python-itu-r` use cases.
+| [P.676](https://www.itu.int/rec/R-REC-P.676) gaseous attenuation, exact and approximate paths | ✅ | Public scalar APIs |
+| [P.618](https://www.itu.int/rec/R-REC-P.618) rain attenuation contribution | ✅ | Public scalar API |
+| [P.618](https://www.itu.int/rec/R-REC-P.618) scintillation attenuation contribution | ✅ | Public scalar APIs |
+| [P.840](https://www.itu.int/rec/R-REC-P.840) cloud attenuation contribution | ✅ | Public scalar APIs |
+| [P.1511](https://www.itu.int/rec/R-REC-P.1511) topographic altitude lookup | ✅ | Public scalar API |
+| [P.1510](https://www.itu.int/rec/R-REC-P.1510) surface mean temperature lookup | ✅ | Public scalar API |
+| [P.836](https://www.itu.int/rec/R-REC-P.836) water vapour density and total content lookup | ✅ | Public scalar APIs |
+| [P.837](https://www.itu.int/rec/R-REC-P.837) rainfall rate lookup | ✅ | Public scalar API |
+| [P.839](https://www.itu.int/rec/R-REC-P.839) rain height lookup | ✅ | Public scalar API |
+| [P.453](https://www.itu.int/rec/R-REC-P.453) wet-term radio refractivity lookup | ✅ | Public scalar APIs |
+| [P.835](https://www.itu.int/rec/R-REC-P.835) reference atmosphere | ✅ | Public scalar APIs |
+| [P.838](https://www.itu.int/rec/R-REC-P.838) rain specific attenuation | ✅ | Public scalar APIs |
+| [P.618](https://www.itu.int/rec/R-REC-P.618) rain attenuation probability | ❌ | Not implemented |
+| [P.618](https://www.itu.int/rec/R-REC-P.618) site-diversity rain outage probability | ❌ | Not implemented |
+| [P.530](https://www.itu.int/rec/R-REC-P.530) terrestrial line-of-sight paths | ❌ | Not implemented |
+| [P.1144](https://www.itu.int/rec/R-REC-P.1144) interpolation helper APIs | ❌ | Not exposed as public APIs |
+| [P.1623](https://www.itu.int/rec/R-REC-P.1623) fade duration, fade slope, and fade depth | ❌ | Not implemented |
+| [P.1853](https://www.itu.int/rec/R-REC-P.1853) tropospheric impairment time-series synthesis | ❌ | Not implemented |
 
 ## Benchmarks
 
 The current comparison benchmark was run from the source workspace on
-May 8, 2026 using the existing Python parity harness against `python-itu-r` and
+May 8, 2026 using the existing Python parity harness against
+[`python-itu-r`](https://github.com/inigodelportillo/ITU-Rpy) and
 the Rust port. Results are means over repeated runs.
 
 | Scenario | Python mean | Rust mean | Speedup | Max absolute error |
@@ -157,7 +164,7 @@ the Rust port. Results are means over repeated runs.
 
 Run the Rust-only Criterion benchmarks with:
 
-```powershell
+```sh
 cargo bench
 ```
 
@@ -177,43 +184,20 @@ Additional scalar APIs expose the implemented recommendation pieces directly:
 
 | Recommendation | Public functions |
 |---|---|
-| P.1510/P.1511 | `surface_mean_temperature_k`, `topographic_altitude_km` |
-| P.835 | `standard_temperature_k`, `standard_pressure_hpa`, `standard_water_vapour_density_gm3` |
-| P.836/P.837/P.839 | `surface_water_vapour_density_gm3`, `total_water_vapour_content_kgm2`, `rainfall_rate_r001_mmh`, `rain_height_km` |
-| P.838 | `rain_specific_attenuation_coefficients`, `rain_specific_attenuation_db_per_km` |
-| P.840 | `cloud_reduced_liquid_kgm2`, `cloud_liquid_mass_absorption_coefficient`, `cloud_specific_attenuation_coefficient`, `cloud_attenuation_db` |
-| P.453 | `wet_term_radio_refractivity`, `radio_refractive_index`, `water_vapour_pressure_hpa`, `map_wet_term_radio_refractivity` |
-| P.676 | `gamma0_exact_db_per_km`, `gammaw_exact_db_per_km`, `gamma_exact_db_per_km`, `slant_inclined_path_equivalent_height_km`, `zenith_water_vapour_attenuation_db`, `gaseous_attenuation_slant_path_db` |
-| P.618 | `rain_attenuation_db`, `scintillation_sigma_db`, `scintillation_attenuation_db` |
+| [P.1510](https://www.itu.int/rec/R-REC-P.1510)/[P.1511](https://www.itu.int/rec/R-REC-P.1511) | `surface_mean_temperature_k`, `topographic_altitude_km` |
+| [P.835](https://www.itu.int/rec/R-REC-P.835) | `standard_temperature_k`, `standard_pressure_hpa`, `standard_water_vapour_density_gm3` |
+| [P.836](https://www.itu.int/rec/R-REC-P.836)/[P.837](https://www.itu.int/rec/R-REC-P.837)/[P.839](https://www.itu.int/rec/R-REC-P.839) | `surface_water_vapour_density_gm3`, `total_water_vapour_content_kgm2`, `rainfall_rate_r001_mmh`, `rain_height_km` |
+| [P.838](https://www.itu.int/rec/R-REC-P.838) | `rain_specific_attenuation_coefficients`, `rain_specific_attenuation_db_per_km` |
+| [P.840](https://www.itu.int/rec/R-REC-P.840) | `cloud_reduced_liquid_kgm2`, `cloud_liquid_mass_absorption_coefficient`, `cloud_specific_attenuation_coefficient`, `cloud_attenuation_db` |
+| [P.453](https://www.itu.int/rec/R-REC-P.453) | `wet_term_radio_refractivity`, `radio_refractive_index`, `water_vapour_pressure_hpa`, `map_wet_term_radio_refractivity` |
+| [P.676](https://www.itu.int/rec/R-REC-P.676) | `gamma0_exact_db_per_km`, `gammaw_exact_db_per_km`, `gamma_exact_db_per_km`, `slant_inclined_path_equivalent_height_km`, `zenith_water_vapour_attenuation_db`, `gaseous_attenuation_slant_path_db` |
+| [P.618](https://www.itu.int/rec/R-REC-P.618) | `rain_attenuation_db`, `scintillation_sigma_db`, `scintillation_attenuation_db` |
 
 `SlantPathOptions::default()` matches the default slant-path configuration used
 by the port. Set `exact = true` to use exact gaseous attenuation.
 
-## Validation
-
-Current local checks:
-
-```powershell
-cargo check
-cargo test
-cargo test --doc
-```
-
-Before publishing, also run:
-
-```powershell
-cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo package --allow-dirty
-```
-
-The local source checkout packages to a small crates.io-compatible `.crate` by
-excluding `data/**`. Keep the data directory in the repository for development
-and parity testing, but do not include it in the crates.io upload unless the
-registry size limit is handled another way.
-
 ## Attribution
 
 This crate contains a Rust port of selected functionality from
-[`python-itu-r`](https://github.com/inigodelportillo/ITU-Rpy), which is MIT
-licensed. See `NOTICE.md`.
+[`python-itu-r`](https://github.com/inigodelportillo/ITU-Rpy), which is MIT licensed. See `NOTICE.md`.
+

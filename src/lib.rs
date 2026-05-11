@@ -1,6 +1,7 @@
-//! Selected ITU-R P-series atmospheric propagation models.
+//! Selected [ITU-R P-series](https://www.itu.int/rec/R-REC-p) atmospheric propagation models.
 //!
-//! This crate is a Rust port of the subset of `python-itu-r` needed for
+//! This crate is a Rust port of the subset of
+//! [`python-itu-r`](https://github.com/inigodelportillo/ITU-Rpy) needed for
 //! Earth-space atmospheric attenuation on a slant path. It currently focuses on
 //! `atmospheric_attenuation_slant_path` and the recommendation data needed to
 //! compute gas, cloud, rain, scintillation, and total attenuation contributions.
@@ -8,9 +9,28 @@
 //! # Data files
 //!
 //! Model grids are loaded lazily on first use. In a repository checkout, the
-//! crate looks for data under `data/` next to `Cargo.toml`. For a published
-//! package, set `ITU_RS_DATA_DIR` to a directory containing the `python-itu-r`
-//! `itur/data` layout.
+//! crate looks for data under `data/` next to `Cargo.toml`. For published
+//! package use, enable `features = ["data"]` so the build downloads, verifies,
+//! and embeds the required data automatically with no runtime configuration.
+//!
+//! The raw [ITU-R](https://www.itu.int/pub/R-REC) grids are too large to
+//! include directly in the crates.io package because crates.io limits the size
+//! of uploaded `.crate` archives.
+//!
+//! If automatic data embedding is not suitable, set `ITU_RS_DATA_DIR` to a
+//! directory containing the
+//! [`python-itu-r`](https://github.com/inigodelportillo/ITU-Rpy) `itur/data`
+//! layout. On Unix shells:
+//!
+//! ```sh
+//! export ITU_RS_DATA_DIR=/path/to/ITU-Rpy/itur/data
+//! ```
+//!
+//! On Windows PowerShell:
+//!
+//! ```powershell
+//! $env:ITU_RS_DATA_DIR = "C:\path\to\ITU-Rpy\itur\data"
+//! ```
 //!
 //! The examples that depend on recommendation grids check whether data is
 //! available before calling the model. That keeps doctests useful in this
@@ -354,27 +374,28 @@ struct IturModel {
 /// Optional environmental and model inputs for slant-path attenuation.
 ///
 /// Defaults match the ported `python-itu-r` slant-path behavior: all
-/// environmental inputs are looked up from the bundled ITU-R grids where
-/// possible, approximate gaseous attenuation is used, and gas, cloud, rain, and
-/// scintillation contributions are included.
+/// environmental inputs are looked up from the bundled
+/// [ITU-R](https://www.itu.int/pub/R-REC) grids where possible, approximate
+/// gaseous attenuation is used, and gas, cloud, rain, and scintillation
+/// contributions are included.
 pub struct SlantPathOptions {
     /// Earth station altitude above mean sea level in kilometres.
     ///
     /// This is the ground terminal height used by rain, gas, and water-vapour
     /// calculations. It may be negative for sites below sea level. When `None`,
-    /// the model uses the P.1511/P.836 topographic map at the requested site.
+    /// the model uses the [P.1511](https://www.itu.int/rec/R-REC-P.1511)/[P.836](https://www.itu.int/rec/R-REC-P.836) topographic map at the requested site.
     pub hs_km: Option<f64>,
     /// Surface water vapour density in g/m^3.
     ///
     /// This is the near-surface absolute humidity used by gaseous attenuation.
-    /// Values must be non-negative. When `None`, P.836 water-vapour maps are
+    /// Values must be non-negative. When `None`, [P.836](https://www.itu.int/rec/R-REC-P.836) water-vapour maps are
     /// used for the site and time percentage.
     pub rho_gm3: Option<f64>,
     /// Rainfall rate exceeded for 0.01% of an average year, in mm/h.
     ///
-    /// This is the intense-rain reference rate used by P.618 to scale rain
+    /// This is the intense-rain reference rate used by [P.618](https://www.itu.int/rec/R-REC-P.618) to scale rain
     /// attenuation for the requested time percentage. Values must be
-    /// non-negative. When `None`, P.837 data are used.
+    /// non-negative. When `None`, [P.837](https://www.itu.int/rec/R-REC-P.837) data are used.
     pub r001_mmh: Option<f64>,
     /// Antenna efficiency factor used in scintillation attenuation.
     ///
@@ -386,7 +407,7 @@ pub struct SlantPathOptions {
     ///
     /// This temperature is used by gaseous attenuation and, when
     /// `h_percent` is provided, converted to Celsius for scintillation humidity
-    /// calculations. Values must be greater than zero. When `None`, P.1510
+    /// calculations. Values must be greater than zero. When `None`, [P.1510](https://www.itu.int/rec/R-REC-P.1510)
     /// annual mean surface temperature data are used.
     pub t: Option<f64>,
     /// Relative humidity percentage for scintillation attenuation.
@@ -399,7 +420,7 @@ pub struct SlantPathOptions {
     ///
     /// This is the surface pressure used by gaseous attenuation and, when
     /// `h_percent` is provided, scintillation water-vapour pressure. Values
-    /// must be positive. When `None`, P.835 standard-atmosphere pressure is
+    /// must be positive. When `None`, [P.835](https://www.itu.int/rec/R-REC-P.835) standard-atmosphere pressure is
     /// computed from `hs_km`.
     pub pressure_hpa: Option<f64>,
     /// Turbulent layer height in metres for scintillation attenuation.
@@ -410,25 +431,25 @@ pub struct SlantPathOptions {
     /// Slant-path length through rain in kilometres.
     ///
     /// This is the portion of the Earth-space path inside the rain region.
-    /// Values must be positive when provided. When `None`, P.618 derives the
+    /// Values must be positive when provided. When `None`, [P.618](https://www.itu.int/rec/R-REC-P.618) derives the
     /// path length from rain height, station height, and elevation.
     pub l_s_km: Option<f64>,
     /// Polarization tilt angle in degrees.
     ///
     /// This describes the radio wave polarization relative to horizontal and
-    /// affects P.838 rain specific attenuation coefficients. It must be in
+    /// affects [P.838](https://www.itu.int/rec/R-REC-P.838) rain specific attenuation coefficients. It must be in
     /// `[0, 90]`; the default is `45.0`.
     pub tau_deg: f64,
     /// Total water vapour content in kg/m^2 for gaseous attenuation.
     ///
     /// This is the vertically integrated water-vapour column above the site.
-    /// Values must be non-negative. When `None`, P.836 total-content maps are
+    /// Values must be non-negative. When `None`, [P.836](https://www.itu.int/rec/R-REC-P.836) total-content maps are
     /// used.
     pub v_t_kgm2: Option<f64>,
     /// Use exact gaseous attenuation when `true`; use the faster approximate
     /// path when `false`.
     ///
-    /// Exact mode integrates the P.676 gaseous model through atmosphere layers.
+    /// Exact mode integrates the [P.676](https://www.itu.int/rec/R-REC-P.676) gaseous model through atmosphere layers.
     /// Approximate mode is faster and matches the default slant-path behavior
     /// of the port. The default is `false`.
     pub exact: bool,
@@ -469,7 +490,7 @@ pub struct SlantPathContributions {
     pub cloud_db: f64,
     /// Rain fade contribution in dB.
     ///
-    /// This comes from the P.618 rain model using rain rate, rain height,
+    /// This comes from the [P.618](https://www.itu.int/rec/R-REC-P.618) rain model using rain rate, rain height,
     /// elevation, path geometry, and polarization.
     pub rain_db: f64,
     /// Tropospheric scintillation contribution in dB.
@@ -1940,7 +1961,7 @@ fn gas_attenuation_default_many_clamped(
     Ok(out)
 }
 
-/// Looks up topographic altitude above mean sea level from ITU-R P.1511.
+/// Looks up topographic altitude above mean sea level from ITU-R [P.1511](https://www.itu.int/rec/R-REC-P.1511).
 ///
 /// This is the terrain height used when a slant-path calculation needs the
 /// Earth station altitude and `SlantPathOptions::hs_km` is not supplied.
@@ -1985,7 +2006,7 @@ pub fn topographic_altitude_km(lat_deg: f64, lon_deg: f64) -> std::result::Resul
         .topographic_altitude_km(lat_deg, lon_deg))
 }
 
-/// Looks up annual mean surface temperature from ITU-R P.1510.
+/// Looks up annual mean surface temperature from ITU-R [P.1510](https://www.itu.int/rec/R-REC-P.1510).
 ///
 /// This provides the site temperature used by default slant-path gas
 /// calculations when `SlantPathOptions::t` is not supplied.
@@ -2030,9 +2051,9 @@ pub fn surface_mean_temperature_k(
         .surface_mean_temperature_k(lat_deg, lon_deg))
 }
 
-/// Computes standard-atmosphere temperature from ITU-R P.835.
+/// Computes standard-atmosphere temperature from ITU-R [P.835](https://www.itu.int/rec/R-REC-P.835).
 ///
-/// The P.835 reference atmosphere supplies a temperature profile by geometric
+/// The [P.835](https://www.itu.int/rec/R-REC-P.835) reference atmosphere supplies a temperature profile by geometric
 /// height. This is useful when a site-specific temperature is not available or
 /// when evaluating gas attenuation at a layer height.
 ///
@@ -2074,7 +2095,7 @@ pub fn standard_temperature_k(h_km: f64) -> std::result::Result<f64, ItuError> {
         .standard_temperature_k(h_km))
 }
 
-/// Computes standard-atmosphere pressure from ITU-R P.835.
+/// Computes standard-atmosphere pressure from ITU-R [P.835](https://www.itu.int/rec/R-REC-P.835).
 ///
 /// The pressure profile is used by the gas model when surface pressure is not
 /// supplied explicitly.
@@ -2115,9 +2136,9 @@ pub fn standard_pressure_hpa(h_km: f64) -> std::result::Result<f64, ItuError> {
     Ok(model().map_err(ItuError::from)?.standard_pressure_hpa(h_km))
 }
 
-/// Computes standard water-vapour density from ITU-R P.835.
+/// Computes standard water-vapour density from ITU-R [P.835](https://www.itu.int/rec/R-REC-P.835).
 ///
-/// This applies the P.835 exponential decrease of water-vapour density with
+/// This applies the [P.835](https://www.itu.int/rec/R-REC-P.835) exponential decrease of water-vapour density with
 /// height from a surface reference density.
 ///
 /// # Parameters
@@ -2164,7 +2185,7 @@ pub fn standard_water_vapour_density_gm3(
         .standard_water_vapour_density_gm3(h_km, rho0_gm3))
 }
 
-/// Looks up surface water-vapour density from ITU-R P.836.
+/// Looks up surface water-vapour density from ITU-R [P.836](https://www.itu.int/rec/R-REC-P.836).
 ///
 /// Surface water-vapour density is near-ground absolute humidity. The slant-path
 /// gas model uses this value when `SlantPathOptions::rho_gm3` is not supplied.
@@ -2219,10 +2240,10 @@ pub fn surface_water_vapour_density_gm3(
         .surface_water_vapour_density_gm3(lat_deg, lon_deg, p, alt_km))
 }
 
-/// Looks up total columnar water-vapour content from ITU-R P.836.
+/// Looks up total columnar water-vapour content from ITU-R [P.836](https://www.itu.int/rec/R-REC-P.836).
 ///
 /// Total water vapour content is the vertically integrated water-vapour mass
-/// above the site. The approximate P.676 gas path uses this when
+/// above the site. The approximate [P.676](https://www.itu.int/rec/R-REC-P.676) gas path uses this when
 /// `SlantPathOptions::v_t_kgm2` is not supplied.
 ///
 /// # Parameters
@@ -2274,9 +2295,9 @@ pub fn total_water_vapour_content_kgm2(
         .total_water_vapour_content_kgm2(lat_deg, lon_deg, p, alt_km))
 }
 
-/// Looks up rainfall rate exceeded for 0.01% of an average year from ITU-R P.837.
+/// Looks up rainfall rate exceeded for 0.01% of an average year from ITU-R [P.837](https://www.itu.int/rec/R-REC-P.837).
 ///
-/// This reference rain rate, usually written `R_0.01`, anchors the P.618 rain
+/// This reference rain rate, usually written `R_0.01`, anchors the [P.618](https://www.itu.int/rec/R-REC-P.618) rain
 /// fade calculation. Other time percentages are derived from it.
 ///
 /// # Parameters
@@ -2316,7 +2337,7 @@ pub fn rainfall_rate_r001_mmh(lat_deg: f64, lon_deg: f64) -> std::result::Result
         .rainfall_rate_r001_mmh(lat_deg, lon_deg))
 }
 
-/// Looks up rain height from ITU-R P.839.
+/// Looks up rain height from ITU-R [P.839](https://www.itu.int/rec/R-REC-P.839).
 ///
 /// Rain height approximates the altitude above which rain is no longer present.
 /// It is used with station height and elevation angle to determine the slant
@@ -2359,7 +2380,7 @@ pub fn rain_height_km(lat_deg: f64, lon_deg: f64) -> std::result::Result<f64, It
         .rain_height_km(lat_deg, lon_deg))
 }
 
-/// Computes ITU-R P.838 rain specific attenuation coefficients.
+/// Computes ITU-R [P.838](https://www.itu.int/rec/R-REC-P.838) rain specific attenuation coefficients.
 ///
 /// The returned `(k, alpha)` coefficients convert rainfall rate `R` to specific
 /// rain attenuation with `gamma_R = k * R^alpha`. Frequency, elevation, and
@@ -2374,7 +2395,7 @@ pub fn rain_height_km(lat_deg: f64, lon_deg: f64) -> std::result::Result<f64, It
 ///
 /// # Returns
 ///
-/// `(k, alpha)` P.838 coefficients for use with rainfall rate in mm/h.
+/// `(k, alpha)` [P.838](https://www.itu.int/rec/R-REC-P.838) coefficients for use with rainfall rate in mm/h.
 ///
 /// # Errors
 ///
@@ -2414,9 +2435,9 @@ pub fn rain_specific_attenuation_coefficients(
         .rain_specific_attenuation_coefficients(freq_ghz, elevation_deg, tau_deg))
 }
 
-/// Computes ITU-R P.838 rain specific attenuation in dB/km.
+/// Computes ITU-R [P.838](https://www.itu.int/rec/R-REC-P.838) rain specific attenuation in dB/km.
 ///
-/// This applies the P.838 relation `gamma_R = k * R^alpha` for a supplied
+/// This applies the [P.838](https://www.itu.int/rec/R-REC-P.838) relation `gamma_R = k * R^alpha` for a supplied
 /// rainfall rate and path geometry.
 ///
 /// # Parameters
@@ -2470,10 +2491,10 @@ pub fn rain_specific_attenuation_db_per_km(
         .rain_specific_attenuation_db_per_km(rainfall_rate_mmh, freq_ghz, elevation_deg, tau_deg))
 }
 
-/// Looks up reduced cloud liquid water content from ITU-R P.840.
+/// Looks up reduced cloud liquid water content from ITU-R [P.840](https://www.itu.int/rec/R-REC-P.840).
 ///
 /// Reduced cloud liquid water content is the cloud liquid column used by the
-/// P.840 cloud attenuation model for the requested time percentage.
+/// [P.840](https://www.itu.int/rec/R-REC-P.840) cloud attenuation model for the requested time percentage.
 ///
 /// # Parameters
 ///
@@ -2519,7 +2540,7 @@ pub fn cloud_reduced_liquid_kgm2(
         .cloud_reduced_liquid_kgm2(lat_deg, lon_deg, p))
 }
 
-/// Computes the P.840 cloud liquid-water mass absorption coefficient.
+/// Computes the [P.840](https://www.itu.int/rec/R-REC-P.840) cloud liquid-water mass absorption coefficient.
 ///
 /// The coefficient describes how efficiently cloud liquid water absorbs radio
 /// waves at the supplied frequency before local temperature is applied by the
@@ -2531,7 +2552,7 @@ pub fn cloud_reduced_liquid_kgm2(
 ///
 /// # Returns
 ///
-/// Liquid-water mass absorption coefficient used by P.840.
+/// Liquid-water mass absorption coefficient used by [P.840](https://www.itu.int/rec/R-REC-P.840).
 ///
 /// # Errors
 ///
@@ -2564,7 +2585,7 @@ pub fn cloud_liquid_mass_absorption_coefficient(
         .cloud_liquid_mass_absorption_coefficient(freq_ghz))
 }
 
-/// Computes the P.840 cloud specific attenuation coefficient.
+/// Computes the [P.840](https://www.itu.int/rec/R-REC-P.840) cloud specific attenuation coefficient.
 ///
 /// This coefficient converts reduced liquid water content into cloud attenuation
 /// for a given radio frequency and cloud temperature.
@@ -2578,7 +2599,7 @@ pub fn cloud_liquid_mass_absorption_coefficient(
 /// # Returns
 ///
 /// Cloud specific attenuation coefficient in dB/km per g/m^3 as defined by
-/// P.840 for the implemented model.
+/// [P.840](https://www.itu.int/rec/R-REC-P.840) for the implemented model.
 ///
 /// # Errors
 ///
@@ -2620,10 +2641,10 @@ pub fn cloud_specific_attenuation_coefficient(
         .cloud_specific_attenuation_coefficients(freq_ghz, temp_c))
 }
 
-/// Computes cloud attenuation from ITU-R P.840.
+/// Computes cloud attenuation from ITU-R [P.840](https://www.itu.int/rec/R-REC-P.840).
 ///
 /// Cloud attenuation is the path attenuation caused by liquid water in clouds
-/// along an Earth-space slant path. If `lred_kgm2` is not supplied, the P.840
+/// along an Earth-space slant path. If `lred_kgm2` is not supplied, the [P.840](https://www.itu.int/rec/R-REC-P.840)
 /// map is used for the requested site and time percentage.
 ///
 /// # Parameters
@@ -2634,7 +2655,7 @@ pub fn cloud_specific_attenuation_coefficient(
 /// - `freq_ghz`: carrier frequency in GHz. Must be positive.
 /// - `p`: percentage of time exceeded. Must be positive.
 /// - `lred_kgm2`: optional reduced cloud liquid water content in kg/m^2. When
-///   `None`, it is looked up from P.840.
+///   `None`, it is looked up from [P.840](https://www.itu.int/rec/R-REC-P.840).
 ///
 /// # Returns
 ///
@@ -2688,7 +2709,7 @@ pub fn cloud_attenuation_db(
     ))
 }
 
-/// Computes wet-term radio refractivity from ITU-R P.453.
+/// Computes wet-term radio refractivity from ITU-R [P.453](https://www.itu.int/rec/R-REC-P.453).
 ///
 /// Wet-term refractivity is the water-vapour part of atmospheric radio
 /// refractivity. It is used by scintillation calculations and by atmospheric
@@ -2741,7 +2762,7 @@ pub fn wet_term_radio_refractivity(e_hpa: f64, temp_c: f64) -> std::result::Resu
         .wet_term_radio_refractivity(e_hpa, temp_c))
 }
 
-/// Computes radio refractive index from ITU-R P.453.
+/// Computes radio refractive index from ITU-R [P.453](https://www.itu.int/rec/R-REC-P.453).
 ///
 /// This converts dry-air pressure, water-vapour pressure, and temperature into
 /// the dimensionless radio refractive index `n`. The value is close to `1.0`
@@ -2792,7 +2813,7 @@ pub fn radio_refractive_index(
         .radio_refractive_index(pd_hpa, e_hpa, temp_k))
 }
 
-/// Computes water-vapour pressure from ITU-R P.453.
+/// Computes water-vapour pressure from ITU-R [P.453](https://www.itu.int/rec/R-REC-P.453).
 ///
 /// This converts air temperature, total pressure, and relative humidity into
 /// water-vapour partial pressure. It is useful when supplying local
@@ -2855,7 +2876,7 @@ pub fn water_vapour_pressure_hpa(
     ))
 }
 
-/// Looks up wet-term radio refractivity maps from ITU-R P.453.
+/// Looks up wet-term radio refractivity maps from ITU-R [P.453](https://www.itu.int/rec/R-REC-P.453).
 ///
 /// This map lookup provides wet-term radio refractivity exceeded for a requested
 /// time percentage. Scintillation calculations use it when local humidity,
@@ -2905,7 +2926,7 @@ pub fn map_wet_term_radio_refractivity(
         .map_wet_term_radio_refractivity(lat_deg, lon_deg, p))
 }
 
-/// Computes dry-air specific attenuation from ITU-R P.676 in dB/km.
+/// Computes dry-air specific attenuation from ITU-R [P.676](https://www.itu.int/rec/R-REC-P.676) in dB/km.
 ///
 /// This is the oxygen and dry-air part of exact gaseous attenuation for a local
 /// atmospheric state. It does not include water-vapour line attenuation.
@@ -2959,7 +2980,7 @@ pub fn gamma0_exact_db_per_km(
         .gamma0_exact_v13(freq_ghz, pressure_hpa, rho_gm3, temp_k))
 }
 
-/// Computes water-vapour specific attenuation from ITU-R P.676 in dB/km.
+/// Computes water-vapour specific attenuation from ITU-R [P.676](https://www.itu.int/rec/R-REC-P.676) in dB/km.
 ///
 /// This is the water-vapour line and continuum part of exact gaseous
 /// attenuation for a local atmospheric state.
@@ -3012,7 +3033,7 @@ pub fn gammaw_exact_db_per_km(
         .gammaw_exact_v13(freq_ghz, pressure_hpa, rho_gm3, temp_k))
 }
 
-/// Computes total specific gaseous attenuation from ITU-R P.676 in dB/km.
+/// Computes total specific gaseous attenuation from ITU-R [P.676](https://www.itu.int/rec/R-REC-P.676) in dB/km.
 ///
 /// This is the sum of dry-air and water-vapour specific attenuation for a local
 /// atmospheric state.
@@ -3065,11 +3086,11 @@ pub fn gamma_exact_db_per_km(
         .gamma_exact_v13(freq_ghz, pressure_hpa, rho_gm3, temp_k))
 }
 
-/// Computes P.676 equivalent heights for dry air and water vapour.
+/// Computes [P.676](https://www.itu.int/rec/R-REC-P.676) equivalent heights for dry air and water vapour.
 ///
 /// Equivalent heights convert local specific gaseous attenuation into an
 /// approximate slant-path attenuation. The returned dry-air and water-vapour
-/// heights are used by the approximate P.676 path calculation.
+/// heights are used by the approximate [P.676](https://www.itu.int/rec/R-REC-P.676) path calculation.
 ///
 /// # Parameters
 ///
@@ -3123,7 +3144,7 @@ pub fn slant_inclined_path_equivalent_height_km(
         .slant_inclined_path_equivalent_height_v13(freq_ghz, pressure_hpa, rho_gm3, temp_k))
 }
 
-/// Computes P.676 zenith water-vapour attenuation.
+/// Computes [P.676](https://www.itu.int/rec/R-REC-P.676) zenith water-vapour attenuation.
 ///
 /// This estimates the water-vapour attenuation for a vertical path above a
 /// station. It is one input to the approximate gaseous slant-path attenuation.
@@ -3174,7 +3195,7 @@ pub fn zenith_water_vapour_attenuation_db(
         .zenith_water_vapour_attenuation_db(freq_ghz, v_t_kgm2, h_km))
 }
 
-/// Computes gaseous attenuation on an Earth-space slant path from ITU-R P.676.
+/// Computes gaseous attenuation on an Earth-space slant path from ITU-R [P.676](https://www.itu.int/rec/R-REC-P.676).
 ///
 /// Gaseous attenuation is absorption by oxygen and water vapour along the
 /// Earth-space path. Use `exact = true` for the layer-integrated model or
@@ -3255,7 +3276,7 @@ pub fn gaseous_attenuation_slant_path_db(
         ))
 }
 
-/// Computes rain attenuation from ITU-R P.618.
+/// Computes rain attenuation from ITU-R [P.618](https://www.itu.int/rec/R-REC-P.618).
 ///
 /// Rain attenuation is the fade contribution from precipitation along the
 /// Earth-space path. The model combines local rain rate, rain height, station
@@ -3271,10 +3292,10 @@ pub fn gaseous_attenuation_slant_path_db(
 ///   value is accepted.
 /// - `p`: percentage of time exceeded. Must be positive.
 /// - `r001_mmh`: optional rainfall rate exceeded for 0.01% of an average year
-///   in mm/h. When `None`, P.837 data are used.
+///   in mm/h. When `None`, [P.837](https://www.itu.int/rec/R-REC-P.837) data are used.
 /// - `tau_deg`: polarization tilt angle in degrees, in `[0, 90]`.
 /// - `l_s_km`: optional slant-path length through rain in kilometres. When
-///   `None`, P.618 derives it from rain height and elevation.
+///   `None`, [P.618](https://www.itu.int/rec/R-REC-P.618) derives it from rain height and elevation.
 ///
 /// # Returns
 ///
@@ -3385,7 +3406,7 @@ fn validate_scintillation_inputs(
     }
 }
 
-/// Computes the P.618 scintillation standard deviation in dB.
+/// Computes the [P.618](https://www.itu.int/rec/R-REC-P.618) scintillation standard deviation in dB.
 ///
 /// This is the standard deviation of short-term tropospheric scintillation
 /// amplitude fluctuations before converting to a fade depth for a requested
@@ -3401,7 +3422,7 @@ fn validate_scintillation_inputs(
 /// - `eta`: aperture efficiency factor, in `(0, 1]`.
 /// - `temp_c`, `humidity_percent`, `pressure_hpa`: optional local meteorology.
 ///   Supply all three together to compute wet refractivity from local
-///   conditions, or supply all as `None` to use P.453 map data.
+///   conditions, or supply all as `None` to use [P.453](https://www.itu.int/rec/R-REC-P.453) map data.
 /// - `h_l_m`: turbulent layer height in metres. Must be positive.
 ///
 /// # Returns
@@ -3472,7 +3493,7 @@ pub fn scintillation_sigma_db(
     ))
 }
 
-/// Computes scintillation attenuation from ITU-R P.618.
+/// Computes scintillation attenuation from ITU-R [P.618](https://www.itu.int/rec/R-REC-P.618).
 ///
 /// This converts the scintillation standard deviation into an attenuation
 /// exceeded for the requested time percentage. It represents the fade
@@ -3488,7 +3509,7 @@ pub fn scintillation_sigma_db(
 /// - `dish_m`: physical antenna diameter in metres. Must be positive.
 /// - `eta`: aperture efficiency factor, in `(0, 1]`.
 /// - `temp_c`, `humidity_percent`, `pressure_hpa`: optional local meteorology.
-///   Supply all three together, or supply all as `None` to use P.453 map data.
+///   Supply all three together, or supply all as `None` to use [P.453](https://www.itu.int/rec/R-REC-P.453) map data.
 /// - `h_l_m`: turbulent layer height in metres. Must be positive.
 ///
 /// # Returns
