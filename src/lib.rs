@@ -9,13 +9,18 @@
 //! # Data files
 //!
 //! Model grids are loaded lazily on first use. In a repository checkout, the
-//! crate looks for data under `data/` next to `Cargo.toml`. For published
-//! package use, enable `features = ["data"]` so the build downloads, verifies,
-//! and embeds the required data automatically with no runtime configuration.
+//! crate looks for data under `data/` next to `Cargo.toml`.
+//!
+//! # Automatic Data Download
+//!
+//! For published package use, enable `features = ["data"]`. No runtime
+//! configuration is required: the build uses local `data/` files when present,
+//! otherwise downloads and embeds the verified data archive.
 //!
 //! The raw [ITU-R](https://www.itu.int/pub/R-REC) grids are too large to
-//! include directly in the crates.io package because crates.io limits the size
-//! of uploaded `.crate` archives.
+//! include directly because crates.io limits `.crate` archive size.
+//!
+//! # Manual Data Directory
 //!
 //! If automatic data embedding is not suitable, set `ITU_RS_DATA_DIR` to a
 //! directory containing the

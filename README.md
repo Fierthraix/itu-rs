@@ -10,34 +10,24 @@ calculations.
 The working repository checkout includes the required [ITU-R](https://www.itu.int/pub/R-REC) grids under
 `itu-rs/data`, so local development is self-contained.
 
-For published-package use, the recommended path is to enable the `data` feature:
+### Automatic Data Download
+
+For published-package use, enable the `data` feature:
 
 ```toml
 [dependencies]
 itu-rs = { version = "1", features = ["data"] }
 ```
 
-With `features = ["data"]`, no runtime configuration is required. The build
-script first uses local `data/` files when they are present; otherwise it
-downloads a source archive, extracts `data/**`, and embeds those bytes into the
-compiled crate. The default download URL points at the `itu-rs-data-v1.zip`
-GitHub Release asset and verifies its pinned SHA256.
+With `features = ["data"]`, no runtime configuration is required: the build
+uses local `data/` files when present, otherwise downloads and embeds the
+verified data archive. The raw [ITU-R](https://www.itu.int/pub/R-REC) grids are
+too large to include directly because crates.io limits `.crate` archive size.
 
-The raw [ITU-R](https://www.itu.int/pub/R-REC) grids are too large to include directly in the crates.io package
-because crates.io limits the size of uploaded `.crate` archives.
+### Manual Data Directory
 
-Override it with `ITU_RS_DATA_URL`, use a local archive with
-`ITU_RS_DATA_ARCHIVE`, set `ITU_RS_DATA_CACHE` for a persistent download cache,
-and set `ITU_RS_DATA_SHA256` to require a different checksum.
-
-The feature is intentionally opt-in because it makes builds network-dependent
-when local data is unavailable and increases the final binary size by roughly the
-compressed grid data size.
-
-### Manual data directory
-
-If you do not want automatic data embedding, set `ITU_RS_DATA_DIR` to a
-directory containing the same `itur/data` layout copied from
+If you do not want automatic data download, set `ITU_RS_DATA_DIR` to a directory
+containing the same `itur/data` layout copied from
 [`python-itu-r`](https://github.com/inigodelportillo/ITU-Rpy).
 
 Unix shells:
@@ -200,4 +190,3 @@ by the port. Set `exact = true` to use exact gaseous attenuation.
 
 This crate contains a Rust port of selected functionality from
 [`python-itu-r`](https://github.com/inigodelportillo/ITU-Rpy), which is MIT licensed. See `NOTICE.md`.
-
