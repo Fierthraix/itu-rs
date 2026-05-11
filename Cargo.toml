@@ -13,6 +13,7 @@ categories = ["science"]
 include = [
     "Cargo.toml",
     "build.rs",
+    "CHANGELOG.md",
     "README.md",
     "LICENSE",
     "NOTICE.md",
