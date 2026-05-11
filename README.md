@@ -8,13 +8,25 @@
 
 `itu-rs` is a Rust implementation of selected [ITU-R P-series](https://www.itu.int/rec/R-REC-p)
 atmospheric propagation routines, ported from
-[`python-itu-r`](https://github.com/inigodelportillo/ITU-Rpy) for fast Earth-space slant-path attenuation
-calculations.
+[`python-itu-r`](https://github.com/inigodelportillo/ITU-Rpy) for Earth-space slant-path attenuation
+calculations that run 30-50x faster than the Python implementation in benchmarked workloads.
+
+## Table of Contents
+
+- [Data Files](#data-files)
+  - [Automatic Data Download](#automatic-data-download)
+  - [Git Repo Checkout](#git-repo-checkout)
+  - [Manual Data Directory](#manual-data-directory)
+- [Example](#example)
+- [Supported Coverage](#supported-coverage)
+- [Benchmarks](#benchmarks)
+- [API](#api)
+- [Attribution](#attribution)
 
 ## Data Files
 
-The working repository checkout includes the required [ITU-R](https://www.itu.int/pub/R-REC) grids under
-`itu-rs/data`, so local development is self-contained.
+`itu-rs` requires [ITU-R](https://www.itu.int/pub/R-REC) data grids, which are too large to include directly because crates.io limits uploaded `.crate` archive size.
+The preferred way to automatically get the data files is by enabling the [`data` feature](#automatic-data-download).
 
 ### Automatic Data Download
 
@@ -27,8 +39,11 @@ itu-rs = { version = "1", features = ["data"] }
 
 With `features = ["data"]`, no runtime configuration is required: the build
 uses local `data/` files when present, otherwise downloads and embeds the
-verified data archive. The raw [ITU-R](https://www.itu.int/pub/R-REC) grids are
-too large to include directly because crates.io limits `.crate` archive size.
+verified data archive.
+
+### Git Repo Checkout
+The working repository checkout includes the required [ITU-R](https://www.itu.int/pub/R-REC) grids under
+`itu-rs/data`, so local development is self-contained.
 
 ### Manual Data Directory
 
@@ -130,13 +145,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 | [P.676](https://www.itu.int/rec/R-REC-P.676) gaseous attenuation, exact and approximate paths | ✅ | Public scalar APIs |
 | [P.618](https://www.itu.int/rec/R-REC-P.618) rain attenuation contribution | ✅ | Public scalar API |
 | [P.618](https://www.itu.int/rec/R-REC-P.618) scintillation attenuation contribution | ✅ | Public scalar APIs |
-| [P.840](https://www.itu.int/rec/R-REC-P.840) cloud attenuation contribution | ✅ | Public scalar APIs |
+| [P.840](https://www.itu.int/rec/R-REC-P.840) cloud attenuation contribution and lognormal approximation | ✅ | Public scalar APIs |
 | [P.1511](https://www.itu.int/rec/R-REC-P.1511) topographic altitude lookup | ✅ | Public scalar API |
-| [P.1510](https://www.itu.int/rec/R-REC-P.1510) surface mean temperature lookup | ✅ | Public scalar API |
+| [P.1510](https://www.itu.int/rec/R-REC-P.1510) annual and monthly surface mean temperature lookup | ✅ | Public scalar APIs |
 | [P.836](https://www.itu.int/rec/R-REC-P.836) water vapour density and total content lookup | ✅ | Public scalar APIs |
-| [P.837](https://www.itu.int/rec/R-REC-P.837) rainfall rate lookup | ✅ | Public scalar API |
-| [P.839](https://www.itu.int/rec/R-REC-P.839) rain height lookup | ✅ | Public scalar API |
-| [P.453](https://www.itu.int/rec/R-REC-P.453) wet-term radio refractivity lookup | ✅ | Public scalar APIs |
+| [P.837](https://www.itu.int/rec/R-REC-P.837) rainfall probability, rainfall rate, and inverse rainfall-rate lookup | ✅ | Public scalar APIs |
+| [P.839](https://www.itu.int/rec/R-REC-P.839) zero-isotherm and rain height lookup | ✅ | Public scalar APIs |
+| [P.453](https://www.itu.int/rec/R-REC-P.453) refractivity, vapour pressure, and refractivity-gradient lookup | ✅ | Public scalar APIs |
+| [P.678](https://www.itu.int/rec/R-REC-P.678) inter-annual variability and exceedance risk | ✅ | Public scalar APIs |
 | [P.835](https://www.itu.int/rec/R-REC-P.835) reference atmosphere | ✅ | Public scalar APIs |
 | [P.838](https://www.itu.int/rec/R-REC-P.838) rain specific attenuation | ✅ | Public scalar APIs |
 | [P.618](https://www.itu.int/rec/R-REC-P.618) rain attenuation probability | ❌ | Not implemented |
@@ -180,12 +196,13 @@ Additional scalar APIs expose the implemented recommendation pieces directly:
 
 | Recommendation | Public functions |
 |---|---|
-| [P.1510](https://www.itu.int/rec/R-REC-P.1510)/[P.1511](https://www.itu.int/rec/R-REC-P.1511) | `surface_mean_temperature_k`, `topographic_altitude_km` |
+| [P.1510](https://www.itu.int/rec/R-REC-P.1510)/[P.1511](https://www.itu.int/rec/R-REC-P.1511) | `surface_mean_temperature_k`, `surface_month_mean_temperature_k`, `topographic_altitude_km` |
 | [P.835](https://www.itu.int/rec/R-REC-P.835) | `standard_temperature_k`, `standard_pressure_hpa`, `standard_water_vapour_density_gm3` |
-| [P.836](https://www.itu.int/rec/R-REC-P.836)/[P.837](https://www.itu.int/rec/R-REC-P.837)/[P.839](https://www.itu.int/rec/R-REC-P.839) | `surface_water_vapour_density_gm3`, `total_water_vapour_content_kgm2`, `rainfall_rate_r001_mmh`, `rain_height_km` |
+| [P.836](https://www.itu.int/rec/R-REC-P.836)/[P.837](https://www.itu.int/rec/R-REC-P.837)/[P.839](https://www.itu.int/rec/R-REC-P.839) | `surface_water_vapour_density_gm3`, `total_water_vapour_content_kgm2`, `rainfall_probability_percent`, `rainfall_rate_r001_mmh`, `rainfall_rate_mmh`, `unavailability_from_rainfall_rate_percent`, `zero_isotherm_height_km`, `rain_height_km` |
 | [P.838](https://www.itu.int/rec/R-REC-P.838) | `rain_specific_attenuation_coefficients`, `rain_specific_attenuation_db_per_km` |
-| [P.840](https://www.itu.int/rec/R-REC-P.840) | `cloud_reduced_liquid_kgm2`, `cloud_liquid_mass_absorption_coefficient`, `cloud_specific_attenuation_coefficient`, `cloud_attenuation_db` |
-| [P.453](https://www.itu.int/rec/R-REC-P.453) | `wet_term_radio_refractivity`, `radio_refractive_index`, `water_vapour_pressure_hpa`, `map_wet_term_radio_refractivity` |
+| [P.840](https://www.itu.int/rec/R-REC-P.840) | `cloud_reduced_liquid_kgm2`, `cloud_liquid_mass_absorption_coefficient`, `cloud_specific_attenuation_coefficient`, `cloud_attenuation_db`, `lognormal_approximation_coefficients`, `cloud_attenuation_lognormal_db` |
+| [P.453](https://www.itu.int/rec/R-REC-P.453) | `wet_term_radio_refractivity`, `dry_term_radio_refractivity`, `radio_refractive_index`, `water_vapour_pressure_hpa`, `saturation_vapour_pressure_hpa`, `map_wet_term_radio_refractivity`, `dn65`, `dn1` |
+| [P.678](https://www.itu.int/rec/R-REC-P.678) | `inter_annual_variability`, `risk_of_exceedance` |
 | [P.676](https://www.itu.int/rec/R-REC-P.676) | `gamma0_exact_db_per_km`, `gammaw_exact_db_per_km`, `gamma_exact_db_per_km`, `slant_inclined_path_equivalent_height_km`, `zenith_water_vapour_attenuation_db`, `gaseous_attenuation_slant_path_db` |
 | [P.618](https://www.itu.int/rec/R-REC-P.618) | `rain_attenuation_db`, `scintillation_sigma_db`, `scintillation_attenuation_db` |
 

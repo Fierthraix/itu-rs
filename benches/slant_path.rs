@@ -1,6 +1,11 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use itu_rs::{
-    SlantPathOptions, atmospheric_attenuation_slant_path, atmospheric_attenuation_slant_path_many,
+    HydrometeorType, SlantPathOptions, atmospheric_attenuation_slant_path,
+    atmospheric_attenuation_slant_path_many, cloud_attenuation_lognormal_db, dn1, dn65,
+    dry_term_radio_refractivity, inter_annual_variability, lognormal_approximation_coefficients,
+    rainfall_probability_percent, rainfall_rate_mmh, risk_of_exceedance,
+    saturation_vapour_pressure_hpa, surface_month_mean_temperature_k,
+    unavailability_from_rainfall_rate_percent, zero_isotherm_height_km,
 };
 use std::hint::black_box;
 
@@ -58,5 +63,34 @@ fn bench_exact_scalar(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_default_many, bench_exact_scalar);
+fn bench_easy_win_scalar_apis(c: &mut Criterion) {
+    c.bench_function("easy_win_scalar_api_set", |b| {
+        b.iter(|| {
+            let lat = black_box(45.4215);
+            let lon = black_box(-75.6972);
+            (
+                surface_month_mean_temperature_k(lat, lon, 1).unwrap(),
+                rainfall_probability_percent(lat, lon).unwrap(),
+                rainfall_rate_mmh(lat, lon, 0.1).unwrap(),
+                unavailability_from_rainfall_rate_percent(lat, lon, 10.0).unwrap(),
+                zero_isotherm_height_km(lat, lon).unwrap(),
+                dry_term_radio_refractivity(1000.0, 288.15).unwrap(),
+                saturation_vapour_pressure_hpa(15.0, 1000.0, HydrometeorType::Water).unwrap(),
+                dn65(lat, lon, 50.0).unwrap(),
+                dn1(lat, lon, 50.0).unwrap(),
+                inter_annual_variability(0.001, lat, lon).unwrap(),
+                risk_of_exceedance(0.001, 0.001, lat, lon).unwrap(),
+                lognormal_approximation_coefficients(lat, lon).unwrap(),
+                cloud_attenuation_lognormal_db(lat, lon, 30.0, 12.0, 1.0).unwrap(),
+            )
+        })
+    });
+}
+
+criterion_group!(
+    benches,
+    bench_default_many,
+    bench_exact_scalar,
+    bench_easy_win_scalar_apis
+);
 criterion_main!(benches);

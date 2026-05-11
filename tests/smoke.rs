@@ -1,15 +1,20 @@
 use itu_rs::{
-    SlantPathOptions, atmospheric_attenuation_slant_path, atmospheric_attenuation_slant_path_many,
-    cloud_attenuation_db, cloud_liquid_mass_absorption_coefficient, cloud_reduced_liquid_kgm2,
-    cloud_specific_attenuation_coefficient, gamma_exact_db_per_km, gamma0_exact_db_per_km,
-    gammaw_exact_db_per_km, gas_attenuation_default, gas_attenuation_default_many_checked,
-    gaseous_attenuation_slant_path_db, map_wet_term_radio_refractivity, radio_refractive_index,
-    rain_attenuation_db, rain_height_km, rain_specific_attenuation_coefficients,
-    rain_specific_attenuation_db_per_km, rainfall_rate_r001_mmh, scintillation_attenuation_db,
-    scintillation_sigma_db, slant_inclined_path_equivalent_height_km, standard_pressure_hpa,
-    standard_temperature_k, standard_water_vapour_density_gm3, surface_mean_temperature_k,
-    surface_water_vapour_density_gm3, topographic_altitude_km, total_water_vapour_content_kgm2,
-    water_vapour_pressure_hpa, wet_term_radio_refractivity, zenith_water_vapour_attenuation_db,
+    HydrometeorType, SlantPathOptions, atmospheric_attenuation_slant_path,
+    atmospheric_attenuation_slant_path_many, cloud_attenuation_db, cloud_attenuation_lognormal_db,
+    cloud_liquid_mass_absorption_coefficient, cloud_reduced_liquid_kgm2,
+    cloud_specific_attenuation_coefficient, dn1, dn65, dry_term_radio_refractivity,
+    gamma_exact_db_per_km, gamma0_exact_db_per_km, gammaw_exact_db_per_km, gas_attenuation_default,
+    gas_attenuation_default_many_checked, gaseous_attenuation_slant_path_db,
+    inter_annual_variability, lognormal_approximation_coefficients,
+    map_wet_term_radio_refractivity, radio_refractive_index, rain_attenuation_db, rain_height_km,
+    rain_specific_attenuation_coefficients, rain_specific_attenuation_db_per_km,
+    rainfall_probability_percent, rainfall_rate_mmh, rainfall_rate_r001_mmh, risk_of_exceedance,
+    saturation_vapour_pressure_hpa, scintillation_attenuation_db, scintillation_sigma_db,
+    slant_inclined_path_equivalent_height_km, standard_pressure_hpa, standard_temperature_k,
+    standard_water_vapour_density_gm3, surface_mean_temperature_k,
+    surface_month_mean_temperature_k, surface_water_vapour_density_gm3, topographic_altitude_km,
+    total_water_vapour_content_kgm2, water_vapour_pressure_hpa, wet_term_radio_refractivity,
+    zenith_water_vapour_attenuation_db, zero_isotherm_height_km,
 };
 use std::path::Path;
 
@@ -120,20 +125,32 @@ fn direct_lookup_wrappers_return_finite_values() {
     let values = [
         h_km,
         surface_mean_temperature_k(lat, lon).unwrap(),
+        surface_month_mean_temperature_k(lat, lon, 1).unwrap(),
         standard_temperature_k(h_km).unwrap(),
         standard_pressure_hpa(h_km).unwrap(),
         standard_water_vapour_density_gm3(h_km, 7.5).unwrap(),
         surface_water_vapour_density_gm3(lat, lon, p, h_km).unwrap(),
         total_water_vapour_content_kgm2(lat, lon, p, h_km).unwrap(),
         rainfall_rate_r001_mmh(lat, lon).unwrap(),
+        rainfall_probability_percent(lat, lon).unwrap(),
+        rainfall_rate_mmh(lat, lon, 0.1).unwrap(),
+        unavailability_from_rainfall_rate_percent_for_test(lat, lon, 10.0),
+        zero_isotherm_height_km(lat, lon).unwrap(),
         rain_height_km(lat, lon).unwrap(),
         cloud_reduced_liquid_kgm2(lat, lon, p).unwrap(),
         cloud_liquid_mass_absorption_coefficient(12.0).unwrap(),
         cloud_specific_attenuation_coefficient(12.0, 0.6).unwrap(),
+        cloud_attenuation_lognormal_db(lat, lon, 30.0, 12.0, p).unwrap(),
         wet_term_radio_refractivity(12.0, 15.0).unwrap(),
+        dry_term_radio_refractivity(1000.0, 288.15).unwrap(),
         radio_refractive_index(1000.0, 12.0, 288.15).unwrap(),
         water_vapour_pressure_hpa(15.0, 1000.0, 60.0).unwrap(),
+        saturation_vapour_pressure_hpa(15.0, 1000.0, HydrometeorType::Water).unwrap(),
         map_wet_term_radio_refractivity(lat, lon, 50.0).unwrap(),
+        dn65(lat, lon, 50.0).unwrap(),
+        dn1(lat, lon, 50.0).unwrap(),
+        inter_annual_variability(0.001, lat, lon).unwrap(),
+        risk_of_exceedance(0.001, 0.001, lat, lon).unwrap(),
         gamma0_exact_db_per_km(12.0, 1008.0, 7.5, 289.2).unwrap(),
         gammaw_exact_db_per_km(12.0, 1008.0, 7.5, 289.2).unwrap(),
         gamma_exact_db_per_km(12.0, 1008.0, 7.5, 289.2).unwrap(),
@@ -149,6 +166,14 @@ fn direct_lookup_wrappers_return_finite_values() {
     let (k, alpha) = rain_specific_attenuation_coefficients(12.0, 30.0, 45.0).unwrap();
     assert!(k.is_finite());
     assert!(alpha.is_finite());
+
+    let (_m, sigma, pclw) = lognormal_approximation_coefficients(lat, lon).unwrap();
+    assert!(sigma.is_finite());
+    assert!(pclw.is_finite());
+}
+
+fn unavailability_from_rainfall_rate_percent_for_test(lat: f64, lon: f64, rain: f64) -> f64 {
+    itu_rs::unavailability_from_rainfall_rate_percent(lat, lon, rain).unwrap()
 }
 
 #[test]
@@ -264,6 +289,12 @@ fn direct_wrapper_invalid_inputs_are_rejected() {
 
     let err = cloud_attenuation_db(0.0, 0.0, 0.0, 12.0, 1.0, None).unwrap_err();
     assert_eq!(err.message(), "elevation_deg must be in (0, 90)");
+
+    let err = surface_month_mean_temperature_k(0.0, 0.0, 13).unwrap_err();
+    assert_eq!(err.message(), "month must be in 1..=12");
+
+    let err = risk_of_exceedance(0.05, 0.05, 0.0, 0.0).unwrap_err();
+    assert_eq!(err.message(), "p_fraction must be in [0.0001, 0.02]");
 
     let err = scintillation_sigma_db(
         0.0,
