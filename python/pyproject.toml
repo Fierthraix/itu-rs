@@ -37,6 +37,7 @@ module-name = "itu_rs._native"
 python-source = "python"
 include = [
     "python/itu_rs/__init__.py",
+    "python/itu_rs/_data.py",
     "python/itu_rs/__init__.pyi",
     "python/itu_rs/py.typed",
 ]

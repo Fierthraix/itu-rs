@@ -109,6 +109,8 @@ jobs:
 
       - name: Test Python wheel
         shell: bash
+        env:
+          ITU_RS_DATA_DIR: ${{ github.workspace }}/data
         run: |
           wheel="$(find dist -name '*.whl' | head -n 1)"
           uv run --python 3.9 --with pytest --with "$wheel" python -m pytest python/tests

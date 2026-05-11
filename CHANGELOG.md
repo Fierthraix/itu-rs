@@ -19,8 +19,8 @@ No user-facing changes yet.
   gas-only, scalar recommendation, and atmospheric helper functions.
 - Added Python classes for `SlantPathOptions`, `SlantPathContributions`, and
   `HydrometeorType`.
-- Added Python wheels that embed the ITU-R data grids, so Python users do not
-  need `ITU_RS_DATA_DIR` for normal installs.
+- Added automatic ITU-R data-grid download and caching for Python installs, so
+  Python users do not need `ITU_RS_DATA_DIR` for normal wheel installs.
 - Added `HydrometeorType` for selecting water or ice saturation-vapour pressure calculations.
 - Added monthly P.1510 temperature lookup through `surface_month_mean_temperature_k`.
 - Added P.837 rain-occurrence and arbitrary-percent rain-rate APIs:

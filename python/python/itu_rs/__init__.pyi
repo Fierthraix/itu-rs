@@ -1,10 +1,13 @@
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Optional, Union
 
 Grid = Sequence[Sequence[float]]
 GasPathMode = Union[str, bool]
 
 __version__: str
+
+def ensure_data_dir() -> Path: ...
 
 class ItuError(Exception): ...
 

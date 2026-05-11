@@ -1,3 +1,7 @@
+from ._data import ensure_data_dir
+
+ensure_data_dir()
+
 from ._native import (
     HydrometeorType,
     ItuError,
@@ -128,4 +132,5 @@ __all__ = [
     "wet_term_radio_refractivity",
     "zenith_water_vapour_attenuation_db",
     "zero_isotherm_height_km",
+    "ensure_data_dir",
 ]

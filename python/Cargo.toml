@@ -12,6 +12,6 @@ name = "_native"
 crate-type = ["cdylib"]
 
 [dependencies]
-itu_rs_core = { package = "itu-rs", path = "..", version = "1.2.0", features = ["data"] }
+itu_rs_core = { package = "itu-rs", path = "..", version = "1.2.0" }
 ndarray = "0.17.2"
 pyo3 = { version = "0.27.1", features = ["abi3-py39", "extension-module"] }

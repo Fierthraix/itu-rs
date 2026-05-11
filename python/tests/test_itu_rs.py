@@ -1,11 +1,13 @@
 import math
+import zipfile
 
 import pytest
 
 import itu_rs
+import itu_rs._data as data
 
 
-def test_scalar_api_uses_embedded_data():
+def test_scalar_api_uses_configured_data():
     value = itu_rs.topographic_altitude_km(45.4215, -75.6972)
 
     assert math.isfinite(value)
@@ -124,3 +126,25 @@ def test_regular_grid_helpers_accept_python_sequences():
 def test_invalid_input_raises_itu_error():
     with pytest.raises(itu_rs.ItuError):
         itu_rs.topographic_altitude_km(100.0, 0.0)
+
+
+def test_data_downloader_uses_cache_without_embedded_data(tmp_path, monkeypatch):
+    archive = tmp_path / "data.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("data/1511/v2_lat.npz", b"sentinel")
+
+    digest = data.hashlib.sha256(archive.read_bytes()).hexdigest()
+    cache = tmp_path / "cache"
+
+    monkeypatch.delenv("ITU_RS_DATA_DIR", raising=False)
+    monkeypatch.setenv("ITU_RS_DATA_CACHE", str(cache))
+    monkeypatch.setattr(data, "DATA_URL", archive.as_uri())
+    monkeypatch.setattr(data, "DATA_SHA256", digest)
+    monkeypatch.setattr(data, "DATA_VERSION", "test-data")
+    monkeypatch.setattr(data, "_local_checkout_data", lambda: None)
+
+    data_dir = itu_rs.ensure_data_dir()
+
+    assert data_dir == cache / "test-data" / "data"
+    assert (data_dir / "1511/v2_lat.npz").read_bytes() == b"sentinel"
+    assert data.os.environ["ITU_RS_DATA_DIR"] == str(data_dir)

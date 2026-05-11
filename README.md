@@ -120,8 +120,8 @@ attenuation = itu_rs.atmospheric_attenuation_slant_path(
 print(f"{attenuation.total_db:.6f} dB")
 ```
 
-Published wheels embed the ITU-R data grids, so normal Python installs do not
-require `ITU_RS_DATA_DIR`.
+The Python package downloads and caches the ITU-R data grids automatically on
+first import. Set `ITU_RS_DATA_DIR` to use an existing local data directory.
 
 For local Python binding development, use `uv`:
 

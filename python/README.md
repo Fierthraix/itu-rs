@@ -24,8 +24,8 @@ The bindings expose the same implemented Rust APIs, including the direct
 [P.1144](https://www.itu.int/rec/R-REC-P.1144), [P.618](https://www.itu.int/rec/R-REC-P.618), and
 [P.676](https://www.itu.int/rec/R-REC-P.676) helper functions.
 
-The Python wheels embed the ITU-R model data through the Rust crate's `data`
-feature, so no separate data directory is required for normal wheel installs.
+The Python package downloads and caches the ITU-R model data automatically on
+first import. Set `ITU_RS_DATA_DIR` to use an existing local data directory.
 
 For local development, use `uv`:
 
