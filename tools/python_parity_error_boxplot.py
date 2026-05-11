@@ -1,4 +1,18 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#   "astropy>=6",
+#   "itur @ git+https://github.com/inigodelportillo/ITU-Rpy.git@6d7f35c3615df543c65a3b647654d69ed15520be",
+#   "matplotlib>=3.8",
+#   "numpy>=1.26",
+#   "pyproj>=3.6",
+#   "scipy>=1.11",
+# ]
+#
+# [tool.uv.extra-build-dependencies]
+# itur = ["astropy>=6", "numpy>=1.26", "pyproj>=3.6", "scipy>=1.11"]
+# ///
 """Generate a Rust-vs-python-itu-r numeric parity box plot.
 
 This is a manual documentation tool, not a test runner. It expects the local
@@ -19,7 +33,20 @@ from typing import Callable, Iterable
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+LOCAL_PYTHON_PACKAGE = REPO_ROOT / "python" / "python"
 DEFAULT_OUTPUT = REPO_ROOT / "docs" / "images" / "python-parity-error-boxplot.png"
+DEFAULT_CASE_SAMPLES = {
+    "Full slant path": 4500,
+    "P.618 rain att.": 4500,
+    "P.676 gas slant": 500,
+    "P.840 cloud att.": 500,
+    "P.618 scintillation": 500,
+    "P.1510 surface temp": 3000,
+    "P.839 rain height": 500,
+    "P.838 rain spec. att.": 1000,
+    "P.676 gamma exact": 500,
+    "P.837 rainfall rate": 9000,
+}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -51,7 +78,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate the README box plot for itu-rs numeric parity against python-itu-r."
     )
-    parser.add_argument("--samples", type=int, default=96, help="deterministic fuzz samples to run")
+    parser.add_argument(
+        "--samples",
+        type=int,
+        default=None,
+        help="uniform samples per case; otherwise uses the hand-tuned README sample plan",
+    )
     parser.add_argument("--seed", type=int, default=20260511, help="deterministic RNG seed")
     parser.add_argument(
         "--workers",
@@ -75,6 +107,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def configure_python_itu_r(path: Path | None) -> None:
+    if LOCAL_PYTHON_PACKAGE.exists():
+        sys.path.insert(0, str(LOCAL_PYTHON_PACKAGE))
     if path is not None and path.exists():
         sys.path.insert(0, str(path.resolve()))
 
@@ -143,57 +177,31 @@ def build_cases() -> list[Case]:
 
     return [
         Case(
-            "P.1510 surface temp",
-            "K",
+            "Full slant path",
+            "dB",
             lambda s: (
-                itu_rs.surface_mean_temperature_k(s.lat, s.lon),
-                scalar(itu1510.surface_mean_temperature(s.lat, s.lon)),
-            ),
-        ),
-        Case(
-            "P.837 rainfall rate",
-            "mm/h",
-            lambda s: (
-                itu_rs.rainfall_rate_mmh(s.lat, s.lon, s.p),
-                scalar(itu837.rainfall_rate(s.lat, s.lon, s.p)),
-            ),
-        ),
-        Case(
-            "P.839 rain height",
-            "km",
-            lambda s: (
-                itu_rs.rain_height_km(s.lat, s.lon),
-                scalar(itu839.rain_height(s.lat, s.lon)),
-            ),
-        ),
-        Case(
-            "P.838 rain spec. att.",
-            "dB/km",
-            lambda s: (
-                itu_rs.rain_specific_attenuation_db_per_km(
-                    s.rain_rate_mmh, s.freq, s.elevation, s.tau
-                ),
+                itu_rs.atmospheric_attenuation_slant_path(
+                    s.lat, s.lon, s.freq, s.elevation, s.p, s.dish_m
+                ).total_db,
                 scalar(
-                    itu838.rain_specific_attenuation(
-                        s.rain_rate_mmh, s.freq, s.elevation, s.tau
+                    itur.atmospheric_attenuation_slant_path(
+                        s.lat, s.lon, s.freq, s.elevation, s.p, s.dish_m
                     )
                 ),
             ),
         ),
         Case(
-            "P.840 cloud att.",
+            "P.618 rain att.",
             "dB",
             lambda s: (
-                itu_rs.cloud_attenuation_db(s.lat, s.lon, s.elevation, s.freq, s.p),
-                scalar(itu840.cloud_attenuation(s.lat, s.lon, s.elevation, s.freq, s.p)),
-            ),
-        ),
-        Case(
-            "P.676 gamma exact",
-            "dB/km",
-            lambda s: (
-                itu_rs.gamma_exact_db_per_km(s.freq, s.pressure_hpa, s.rho_gm3, s.temp_k),
-                scalar(itu676.gamma_exact(s.freq, s.pressure_hpa, s.rho_gm3, s.temp_k)),
+                itu_rs.rain_attenuation_db(
+                    s.lat, s.lon, s.freq, s.elevation, s.hs_km, s.p, None, s.tau, None
+                ),
+                scalar(
+                    itu618.rain_attenuation(
+                        s.lat, s.lon, s.freq, s.elevation, s.hs_km, s.p, None, s.tau, None
+                    )
+                ),
             ),
         ),
         Case(
@@ -225,17 +233,11 @@ def build_cases() -> list[Case]:
             ),
         ),
         Case(
-            "P.618 rain att.",
+            "P.840 cloud att.",
             "dB",
             lambda s: (
-                itu_rs.rain_attenuation_db(
-                    s.lat, s.lon, s.freq, s.elevation, s.hs_km, s.p, None, s.tau, None
-                ),
-                scalar(
-                    itu618.rain_attenuation(
-                        s.lat, s.lon, s.freq, s.elevation, s.hs_km, s.p, None, s.tau, None
-                    )
-                ),
+                itu_rs.cloud_attenuation_db(s.lat, s.lon, s.elevation, s.freq, s.p),
+                scalar(itu840.cloud_attenuation(s.lat, s.lon, s.elevation, s.freq, s.p)),
             ),
         ),
         Case(
@@ -273,33 +275,66 @@ def build_cases() -> list[Case]:
             ),
         ),
         Case(
-            "Full slant path",
-            "dB",
+            "P.1510 surface temp",
+            "K",
             lambda s: (
-                itu_rs.atmospheric_attenuation_slant_path(
-                    s.lat, s.lon, s.freq, s.elevation, s.p, s.dish_m
-                ).total_db,
+                itu_rs.surface_mean_temperature_k(s.lat, s.lon),
+                scalar(itu1510.surface_mean_temperature(s.lat, s.lon)),
+            ),
+        ),
+        Case(
+            "P.839 rain height",
+            "km",
+            lambda s: (
+                itu_rs.rain_height_km(s.lat, s.lon),
+                scalar(itu839.rain_height(s.lat, s.lon)),
+            ),
+        ),
+        Case(
+            "P.838 rain spec. att.",
+            "dB/km",
+            lambda s: (
+                itu_rs.rain_specific_attenuation_db_per_km(
+                    s.rain_rate_mmh, s.freq, s.elevation, s.tau
+                ),
                 scalar(
-                    itur.atmospheric_attenuation_slant_path(
-                        s.lat, s.lon, s.freq, s.elevation, s.p, s.dish_m
+                    itu838.rain_specific_attenuation(
+                        s.rain_rate_mmh, s.freq, s.elevation, s.tau
                     )
                 ),
+            ),
+        ),
+        Case(
+            "P.676 gamma exact",
+            "dB/km",
+            lambda s: (
+                itu_rs.gamma_exact_db_per_km(s.freq, s.pressure_hpa, s.rho_gm3, s.temp_k),
+                scalar(itu676.gamma_exact(s.freq, s.pressure_hpa, s.rho_gm3, s.temp_k)),
+            ),
+        ),
+        Case(
+            "P.837 rainfall rate",
+            "mm/h",
+            lambda s: (
+                itu_rs.rainfall_rate_mmh(s.lat, s.lon, s.p),
+                scalar(itu837.rainfall_rate(s.lat, s.lon, s.p)),
             ),
         ),
     ]
 
 
+def compare_case(case: Case, sample: Sample) -> float:
+    rust_value, python_value = case.compare(sample)
+    if not math.isfinite(rust_value) or not math.isfinite(python_value):
+        raise ValueError(
+            f"{case.label} produced a non-finite value for sample {sample.index}: "
+            f"rust={rust_value!r}, python={python_value!r}"
+        )
+    return abs(rust_value - python_value)
+
+
 def compare_sample(sample: Sample, cases: list[Case]) -> dict[str, float]:
-    errors: dict[str, float] = {}
-    for case in cases:
-        rust_value, python_value = case.compare(sample)
-        if not math.isfinite(rust_value) or not math.isfinite(python_value):
-            raise ValueError(
-                f"{case.label} produced a non-finite value for sample {sample.index}: "
-                f"rust={rust_value!r}, python={python_value!r}"
-            )
-        errors[case.label] = abs(rust_value - python_value)
-    return errors
+    return {case.label: compare_case(case, sample) for case in cases}
 
 
 def collect_errors(samples: list[Sample], cases: list[Case], workers: int) -> dict[str, list[float]]:
@@ -329,6 +364,26 @@ def collect_errors(samples: list[Sample], cases: list[Case], workers: int) -> di
     return errors
 
 
+def collect_case_errors(case: Case, samples: list[Sample], workers: int) -> list[float]:
+    if not samples:
+        return []
+    first, rest = samples[0], samples[1:]
+    errors = [compare_case(case, first)]
+    if workers <= 1:
+        errors.extend(compare_case(case, sample) for sample in rest)
+        return errors
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(compare_case, case, sample): sample.index for sample in rest}
+        for future in concurrent.futures.as_completed(futures):
+            sample_index = futures[future]
+            try:
+                errors.append(future.result())
+            except Exception as exc:
+                raise RuntimeError(f"{case.label} failed for sample {sample_index}") from exc
+    return errors
+
+
 def stats(values: Iterable[float]) -> tuple[float, float, float]:
     items = list(values)
     mean = sum(items) / len(items)
@@ -336,20 +391,68 @@ def stats(values: Iterable[float]) -> tuple[float, float, float]:
     return mean, math.sqrt(variance), max(items)
 
 
+def collect_planned_errors(
+    cases: list[Case],
+    sample_counts: dict[str, int],
+    seed: int,
+    workers: int,
+) -> dict[str, list[float]]:
+    max_count = max(sample_counts[case.label] for case in cases)
+    all_samples = make_samples(max_count, seed)
+    return {
+        case.label: collect_case_errors(case, all_samples[: sample_counts[case.label]], workers)
+        for case in cases
+    }
+
+
 def render_plot(errors: dict[str, list[float]], cases: list[Case], output: Path) -> None:
     import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
 
     labels = [case.label for case in cases]
     units = {case.label: case.unit for case in cases}
     data = [[max(error, 1e-16) for error in errors[label]] for label in labels]
     sigma = {label: stats(errors[label])[1] for label in labels}
-    tick_labels = [f"{label}\nstd={sigma[label]:.1e} {units[label]}" for label in labels]
+    tick_labels = [
+        f"{label}\nn={len(errors[label])}, std={sigma[label]:.1e} {units[label]}"
+        for label in labels
+    ]
 
-    fig, ax = plt.subplots(figsize=(12, 6.5), dpi=160)
+    fig, ax = plt.subplots(figsize=(12, 7.1), dpi=160)
+    flierprops = {
+        "marker": "o",
+        "markerfacecolor": "none",
+        "markeredgecolor": "#3b3b3b",
+        "markersize": 4,
+        "linestyle": "none",
+    }
+    medianprops = {"color": "#d95f02", "linewidth": 1.6}
+    whiskerprops = {"color": "#222222", "linewidth": 1.0}
+    capprops = {"color": "#222222", "linewidth": 1.0}
+
     try:
-        plot = ax.boxplot(data, tick_labels=tick_labels, showfliers=True, patch_artist=True)
+        plot = ax.boxplot(
+            data,
+            tick_labels=tick_labels,
+            showfliers=True,
+            patch_artist=True,
+            flierprops=flierprops,
+            medianprops=medianprops,
+            whiskerprops=whiskerprops,
+            capprops=capprops,
+        )
     except TypeError:
-        plot = ax.boxplot(data, labels=tick_labels, showfliers=True, patch_artist=True)
+        plot = ax.boxplot(
+            data,
+            labels=tick_labels,
+            showfliers=True,
+            patch_artist=True,
+            flierprops=flierprops,
+            medianprops=medianprops,
+            whiskerprops=whiskerprops,
+            capprops=capprops,
+        )
 
     for box in plot["boxes"]:
         box.set_facecolor("#9ecae1")
@@ -361,6 +464,38 @@ def render_plot(errors: dict[str, list[float]], cases: list[Case], output: Path)
     ax.set_title("itu-rs numerical parity across deterministic fuzz samples")
     ax.grid(True, axis="y", which="both", linestyle=":", linewidth=0.7, alpha=0.6)
     ax.tick_params(axis="x", labelrotation=35, labelsize=8)
+    ax.legend(
+        handles=[
+            Patch(facecolor="#9ecae1", edgecolor="#08519c", alpha=0.85, label="25-75% range"),
+            Line2D([0], [0], color="#d95f02", linewidth=1.6, label="median"),
+            Line2D([0], [0], color="#222222", linewidth=1.0, label="whiskers: 1.5x IQR"),
+            Line2D(
+                [0],
+                [0],
+                marker="o",
+                markerfacecolor="none",
+                markeredgecolor="#3b3b3b",
+                linestyle="none",
+                markersize=5,
+                label="outlier fuzz sample",
+            ),
+        ],
+        loc="upper center",
+        bbox_to_anchor=(0.55, 0.995),
+        frameon=True,
+        title="Box plot key",
+    )
+    ax.text(
+        0.01,
+        0.015,
+        "Hand-tuned sampling spends extra comparisons on higher-error, higher-variance cases; "
+        "std values are shown in native units.",
+        transform=ax.transAxes,
+        fontsize=8,
+        ha="left",
+        va="bottom",
+        color="#333333",
+    )
 
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
@@ -371,6 +506,7 @@ def render_plot(errors: dict[str, list[float]], cases: list[Case], output: Path)
 def print_summary(errors: dict[str, list[float]], cases: list[Case], workers: int, output: Path) -> None:
     print(f"workers: {workers}")
     print(f"output: {output}")
+    print(f"total comparisons: {sum(len(values) for values in errors.values())}")
     print()
     print("| Case | n | mean abs error | std dev | max abs error |")
     print("|---|---:|---:|---:|---:|")
@@ -387,10 +523,13 @@ def main() -> None:
     args = parse_args()
     configure_python_itu_r(args.itu_rpy_path)
     cases = build_cases()
-    samples = make_samples(args.samples, args.seed)
     workers = max(1, args.workers)
 
-    errors = collect_errors(samples, cases, workers)
+    if args.samples is not None:
+        samples = make_samples(args.samples, args.seed)
+        errors = collect_errors(samples, cases, workers)
+    else:
+        errors = collect_planned_errors(cases, DEFAULT_CASE_SAMPLES, args.seed, workers)
     render_plot(errors, cases, args.output)
     print_summary(errors, cases, workers, args.output)
 
