@@ -1,8 +1,11 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use itu_rs::{
-    HydrometeorType, SlantPathOptions, atmospheric_attenuation_slant_path,
+    GasPathMode, HydrometeorType, SlantPathOptions, atmospheric_attenuation_slant_path,
     atmospheric_attenuation_slant_path_many, cloud_attenuation_lognormal_db, dn1, dn65,
-    dry_term_radio_refractivity, inter_annual_variability, lognormal_approximation_coefficients,
+    dry_term_radio_refractivity, fit_rain_attenuation_to_lognormal,
+    gaseous_attenuation_inclined_path_db, gaseous_attenuation_terrestrial_path_db,
+    inter_annual_variability, lognormal_approximation_coefficients,
+    rain_attenuation_probability_percent, rain_cross_polarization_discrimination_db,
     rainfall_probability_percent, rainfall_rate_mmh, risk_of_exceedance,
     saturation_vapour_pressure_hpa, surface_month_mean_temperature_k,
     unavailability_from_rainfall_rate_percent, zero_isotherm_height_km,
@@ -82,6 +85,31 @@ fn bench_scalar_recommendation_apis(c: &mut Criterion) {
                 risk_of_exceedance(0.001, 0.001, lat, lon).unwrap(),
                 lognormal_approximation_coefficients(lat, lon).unwrap(),
                 cloud_attenuation_lognormal_db(lat, lon, 30.0, 12.0, 1.0).unwrap(),
+                gaseous_attenuation_terrestrial_path_db(
+                    10.0,
+                    12.0,
+                    30.0,
+                    7.5,
+                    1008.0,
+                    289.2,
+                    GasPathMode::Approximate,
+                )
+                .unwrap(),
+                gaseous_attenuation_inclined_path_db(
+                    12.0,
+                    30.0,
+                    7.5,
+                    1008.0,
+                    289.2,
+                    0.4,
+                    2.0,
+                    GasPathMode::Approximate,
+                )
+                .unwrap(),
+                rain_attenuation_probability_percent(lat, lon, 30.0, Some(0.4), None, None)
+                    .unwrap(),
+                fit_rain_attenuation_to_lognormal(lat, lon, 12.0, 30.0, 0.4, 10.0, 45.0).unwrap(),
+                rain_cross_polarization_discrimination_db(10.0, 12.0, 30.0, 0.1, 45.0).unwrap(),
             )
         })
     });

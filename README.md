@@ -200,8 +200,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 | `itur.atmospheric_attenuation_slant_path` | ✅ | Public API |
 | Batched slant-path attenuation over elevation angles | ✅ | Public API |
 | Gas-only default slant-path attenuation helper | ✅ | Public API |
-| [P.676](https://www.itu.int/rec/R-REC-P.676) gaseous attenuation, exact and approximate paths | ✅ | Public scalar APIs |
-| [P.618](https://www.itu.int/rec/R-REC-P.618) rain attenuation contribution | ✅ | Public scalar API |
+| [P.676](https://www.itu.int/rec/R-REC-P.676) gaseous attenuation, exact and approximate slant, terrestrial, and inclined paths | ✅ | Public scalar APIs |
+| [P.618](https://www.itu.int/rec/R-REC-P.618) rain attenuation, rain probability, diversity, XPD, and lognormal fit helpers | ✅ | Public scalar APIs |
 | [P.618](https://www.itu.int/rec/R-REC-P.618) scintillation attenuation contribution | ✅ | Public scalar APIs |
 | [P.840](https://www.itu.int/rec/R-REC-P.840) cloud attenuation contribution and lognormal approximation | ✅ | Public scalar APIs |
 | [P.1511](https://www.itu.int/rec/R-REC-P.1511) topographic altitude lookup | ✅ | Public scalar API |
@@ -213,10 +213,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 | [P.678](https://www.itu.int/rec/R-REC-P.678) inter-annual variability and exceedance risk | ✅ | Public scalar APIs |
 | [P.835](https://www.itu.int/rec/R-REC-P.835) reference atmosphere | ✅ | Public scalar APIs |
 | [P.838](https://www.itu.int/rec/R-REC-P.838) rain specific attenuation | ✅ | Public scalar APIs |
-| [P.618](https://www.itu.int/rec/R-REC-P.618) rain attenuation probability | ❌ | Not implemented |
-| [P.618](https://www.itu.int/rec/R-REC-P.618) site-diversity rain outage probability | ❌ | Not implemented |
+| [P.1144](https://www.itu.int/rec/R-REC-P.1144) regular-grid interpolation helper APIs | ✅ | Public scalar APIs |
 | [P.530](https://www.itu.int/rec/R-REC-P.530) terrestrial line-of-sight paths | ❌ | Not implemented |
-| [P.1144](https://www.itu.int/rec/R-REC-P.1144) interpolation helper APIs | ❌ | Not exposed as public APIs |
 | [P.1623](https://www.itu.int/rec/R-REC-P.1623) fade duration, fade slope, and fade depth | ❌ | Not implemented |
 | [P.1853](https://www.itu.int/rec/R-REC-P.1853) tropospheric impairment time-series synthesis | ❌ | Not implemented |
 
@@ -261,8 +259,9 @@ Additional scalar APIs expose the implemented recommendation pieces directly:
 | [P.840](https://www.itu.int/rec/R-REC-P.840) | `cloud_reduced_liquid_kgm2`, `cloud_liquid_mass_absorption_coefficient`, `cloud_specific_attenuation_coefficient`, `cloud_attenuation_db`, `lognormal_approximation_coefficients`, `cloud_attenuation_lognormal_db` |
 | [P.453](https://www.itu.int/rec/R-REC-P.453) | `wet_term_radio_refractivity`, `dry_term_radio_refractivity`, `radio_refractive_index`, `water_vapour_pressure_hpa`, `saturation_vapour_pressure_hpa`, `map_wet_term_radio_refractivity`, `dn65`, `dn1` |
 | [P.678](https://www.itu.int/rec/R-REC-P.678) | `inter_annual_variability`, `risk_of_exceedance` |
-| [P.676](https://www.itu.int/rec/R-REC-P.676) | `gamma0_exact_db_per_km`, `gammaw_exact_db_per_km`, `gamma_exact_db_per_km`, `slant_inclined_path_equivalent_height_km`, `zenith_water_vapour_attenuation_db`, `gaseous_attenuation_slant_path_db` |
-| [P.618](https://www.itu.int/rec/R-REC-P.618) | `rain_attenuation_db`, `scintillation_sigma_db`, `scintillation_attenuation_db` |
+| [P.676](https://www.itu.int/rec/R-REC-P.676) | `gamma0_exact_db_per_km`, `gammaw_exact_db_per_km`, `gamma_exact_db_per_km`, `gamma0_approx_db_per_km`, `gammaw_approx_db_per_km`, `slant_inclined_path_equivalent_height_km`, `zenith_water_vapour_attenuation_db`, `gaseous_attenuation_slant_path_db`, `gaseous_attenuation_terrestrial_path_db`, `gaseous_attenuation_inclined_path_db` |
+| [P.618](https://www.itu.int/rec/R-REC-P.618) | `rain_attenuation_db`, `rain_attenuation_probability_percent`, `fit_rain_attenuation_to_lognormal`, `site_diversity_rain_outage_probability_percent`, `rain_cross_polarization_discrimination_db`, `scintillation_sigma_db`, `scintillation_attenuation_db` |
+| [P.1144](https://www.itu.int/rec/R-REC-P.1144) | `is_regular_grid`, `nearest_2d_interpolate`, `bilinear_2d_interpolate`, `bicubic_2d_interpolate` |
 
 `SlantPathOptions::default()` matches the default slant-path configuration used
 by the port. Set `exact = true` to use exact gaseous attenuation.

@@ -221,6 +221,37 @@ struct RegularGrid2D {
 }
 
 impl RegularGrid2D {
+    fn from_arrays(
+        lat_grid: &Array2<f64>,
+        lon_grid: &Array2<f64>,
+        values: &Array2<f64>,
+    ) -> Result<Self, String> {
+        validate_grid_shapes(lat_grid, lon_grid, values)?;
+        if !is_regular_grid_inner(lat_grid, lon_grid)? {
+            return Err("lat_grid and lon_grid must describe a regular grid".to_string());
+        }
+
+        let mut lat_axis: Vec<f64> = lat_grid.column(0).iter().copied().collect();
+        let mut lon_axis: Vec<f64> = lon_grid.row(0).iter().copied().collect();
+        let mut values = values.clone();
+
+        if lat_axis.first().copied().unwrap_or(0.0) > lat_axis.last().copied().unwrap_or(0.0) {
+            lat_axis.reverse();
+            values.invert_axis(Axis(0));
+        }
+
+        if lon_axis.first().copied().unwrap_or(0.0) > lon_axis.last().copied().unwrap_or(0.0) {
+            lon_axis.reverse();
+            values.invert_axis(Axis(1));
+        }
+
+        Ok(Self {
+            lat_axis,
+            lon_axis,
+            values,
+        })
+    }
+
     fn from_npz(
         rel_lat: &str,
         rel_lon: &str,
@@ -277,6 +308,12 @@ impl RegularGrid2D {
         let v1 = v01 * (1.0 - lat_frac) + v11 * lat_frac;
         v0 * (1.0 - lon_frac) + v1 * lon_frac
     }
+
+    fn nearest(&self, lat: f64, lon: f64) -> f64 {
+        let lat_idx = nearest_axis_index(&self.lat_axis, lat);
+        let lon_idx = nearest_axis_index(&self.lon_axis, lon);
+        self.values[[lat_idx, lon_idx]]
+    }
 }
 
 struct BicubicGrid2D {
@@ -286,6 +323,40 @@ struct BicubicGrid2D {
 }
 
 impl BicubicGrid2D {
+    fn from_arrays(
+        lat_grid: &Array2<f64>,
+        lon_grid: &Array2<f64>,
+        values: &Array2<f64>,
+    ) -> Result<Self, String> {
+        validate_grid_shapes(lat_grid, lon_grid, values)?;
+        if lat_grid.nrows() < 4 || lat_grid.ncols() < 4 {
+            return Err("bicubic interpolation requires at least a 4x4 grid".to_string());
+        }
+        if !is_regular_grid_inner(lat_grid, lon_grid)? {
+            return Err("lat_grid and lon_grid must describe a regular grid".to_string());
+        }
+
+        let mut lat_axis: Vec<f64> = lat_grid.column(0).iter().copied().collect();
+        let mut lon_axis: Vec<f64> = lon_grid.row(0).iter().copied().collect();
+        let mut values = values.clone();
+
+        if lat_axis.first().copied().unwrap_or(0.0) > lat_axis.last().copied().unwrap_or(0.0) {
+            lat_axis.reverse();
+            values.invert_axis(Axis(0));
+        }
+
+        if lon_axis.first().copied().unwrap_or(0.0) > lon_axis.last().copied().unwrap_or(0.0) {
+            lon_axis.reverse();
+            values.invert_axis(Axis(1));
+        }
+
+        Ok(Self {
+            lat_axis,
+            lon_axis,
+            values,
+        })
+    }
+
     fn from_npz(
         rel_lat: &str,
         rel_lon: &str,
@@ -525,6 +596,212 @@ pub enum HydrometeorType {
     Water,
     /// Saturation over ice.
     Ice,
+}
+
+/// Calculation mode for [P.676](https://www.itu.int/rec/R-REC-P.676) gaseous path attenuation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GasPathMode {
+    /// Use the faster equivalent-height approximation.
+    Approximate,
+    /// Use the exact specific-attenuation method where the recommendation defines one.
+    Exact,
+}
+
+/// Tests whether latitude and longitude matrices describe a regular [P.1144](https://www.itu.int/rec/R-REC-P.1144) grid.
+///
+/// A regular grid has constant latitude spacing down columns, constant
+/// longitude spacing across rows, and non-zero spacing in both directions.
+/// Inputs are coordinate matrices in degrees.
+///
+/// # Parameters
+///
+/// - `lat_grid`: latitude coordinate matrix in degrees.
+/// - `lon_grid`: longitude coordinate matrix in degrees.
+///
+/// # Returns
+///
+/// `true` when the coordinate matrices form a regular grid.
+///
+/// # Errors
+///
+/// Returns an error if shapes differ, the grid is too small, or any coordinate
+/// is not finite.
+///
+/// # Example
+///
+/// ```
+/// use ndarray::array;
+///
+/// let lat = array![[1.0, 1.0], [0.0, 0.0]];
+/// let lon = array![[0.0, 1.0], [0.0, 1.0]];
+///
+/// assert!(itu_rs::is_regular_grid(&lat, &lon)?);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn is_regular_grid(
+    lat_grid: &Array2<f64>,
+    lon_grid: &Array2<f64>,
+) -> std::result::Result<bool, ItuError> {
+    validate_grid_shapes(lat_grid, lon_grid, lat_grid).map_err(ItuError::from)?;
+    is_regular_grid_inner(lat_grid, lon_grid).map_err(ItuError::from)
+}
+
+/// Interpolates a regular [P.1144](https://www.itu.int/rec/R-REC-P.1144) grid with nearest-neighbour interpolation.
+///
+/// # Parameters
+///
+/// - `lat_grid`: latitude coordinate matrix in degrees.
+/// - `lon_grid`: longitude coordinate matrix in degrees.
+/// - `values`: value matrix at the coordinate points.
+/// - `lat_deg`: query latitude in degrees.
+/// - `lon_deg`: query longitude in degrees.
+///
+/// # Returns
+///
+/// Nearest grid value at the query coordinate.
+///
+/// # Errors
+///
+/// Returns an error if inputs are invalid or the coordinates are not a regular
+/// grid.
+///
+/// # Example
+///
+/// ```
+/// use ndarray::array;
+///
+/// let lat = array![[1.0, 1.0], [0.0, 0.0]];
+/// let lon = array![[0.0, 1.0], [0.0, 1.0]];
+/// let values = array![[10.0, 11.0], [0.0, 1.0]];
+///
+/// let value = itu_rs::nearest_2d_interpolate(&lat, &lon, &values, 0.2, 0.2)?;
+/// assert_eq!(value, 0.0);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn nearest_2d_interpolate(
+    lat_grid: &Array2<f64>,
+    lon_grid: &Array2<f64>,
+    values: &Array2<f64>,
+    lat_deg: f64,
+    lon_deg: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_finite("lat_deg", lat_deg)
+        .and_then(|_| validate_finite("lon_deg", lon_deg))
+        .map_err(ItuError::from)?;
+    Ok(RegularGrid2D::from_arrays(lat_grid, lon_grid, values)
+        .map_err(ItuError::from)?
+        .nearest(lat_deg, lon_deg))
+}
+
+/// Interpolates a regular [P.1144](https://www.itu.int/rec/R-REC-P.1144) grid with bilinear interpolation.
+///
+/// Bilinear interpolation blends the four surrounding grid values. Queries
+/// outside the grid are clamped to the nearest edge, matching the crate's
+/// internal map lookup behavior.
+///
+/// # Parameters
+///
+/// - `lat_grid`: latitude coordinate matrix in degrees.
+/// - `lon_grid`: longitude coordinate matrix in degrees.
+/// - `values`: value matrix at the coordinate points.
+/// - `lat_deg`: query latitude in degrees.
+/// - `lon_deg`: query longitude in degrees.
+///
+/// # Returns
+///
+/// Bilinearly interpolated value.
+///
+/// # Errors
+///
+/// Returns an error if inputs are invalid or the coordinates are not a regular
+/// grid.
+///
+/// # Example
+///
+/// ```
+/// use ndarray::array;
+///
+/// let lat = array![[1.0, 1.0], [0.0, 0.0]];
+/// let lon = array![[0.0, 1.0], [0.0, 1.0]];
+/// let values = array![[10.0, 11.0], [0.0, 1.0]];
+///
+/// let value = itu_rs::bilinear_2d_interpolate(&lat, &lon, &values, 0.5, 0.5)?;
+/// assert!((value - 5.5).abs() < 1e-12);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn bilinear_2d_interpolate(
+    lat_grid: &Array2<f64>,
+    lon_grid: &Array2<f64>,
+    values: &Array2<f64>,
+    lat_deg: f64,
+    lon_deg: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_finite("lat_deg", lat_deg)
+        .and_then(|_| validate_finite("lon_deg", lon_deg))
+        .map_err(ItuError::from)?;
+    Ok(RegularGrid2D::from_arrays(lat_grid, lon_grid, values)
+        .map_err(ItuError::from)?
+        .interp(lat_deg, lon_deg))
+}
+
+/// Interpolates a regular [P.1144](https://www.itu.int/rec/R-REC-P.1144) grid with bicubic interpolation.
+///
+/// Bicubic interpolation uses a 4-by-4 neighbourhood and requires at least a
+/// 4-by-4 regular coordinate grid.
+///
+/// # Parameters
+///
+/// - `lat_grid`: latitude coordinate matrix in degrees.
+/// - `lon_grid`: longitude coordinate matrix in degrees.
+/// - `values`: value matrix at the coordinate points.
+/// - `lat_deg`: query latitude in degrees.
+/// - `lon_deg`: query longitude in degrees.
+///
+/// # Returns
+///
+/// Bicubic interpolated value.
+///
+/// # Errors
+///
+/// Returns an error if inputs are invalid, the grid is smaller than 4-by-4, or
+/// the coordinates are not a regular grid.
+///
+/// # Example
+///
+/// ```
+/// use ndarray::array;
+///
+/// let lat = array![
+///     [3.0, 3.0, 3.0, 3.0],
+///     [2.0, 2.0, 2.0, 2.0],
+///     [1.0, 1.0, 1.0, 1.0],
+///     [0.0, 0.0, 0.0, 0.0],
+/// ];
+/// let lon = array![
+///     [0.0, 1.0, 2.0, 3.0],
+///     [0.0, 1.0, 2.0, 3.0],
+///     [0.0, 1.0, 2.0, 3.0],
+///     [0.0, 1.0, 2.0, 3.0],
+/// ];
+/// let values = &lat * 10.0 + &lon;
+///
+/// let value = itu_rs::bicubic_2d_interpolate(&lat, &lon, &values, 1.5, 1.5)?;
+/// assert!(value.is_finite());
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn bicubic_2d_interpolate(
+    lat_grid: &Array2<f64>,
+    lon_grid: &Array2<f64>,
+    values: &Array2<f64>,
+    lat_deg: f64,
+    lon_deg: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_finite("lat_deg", lat_deg)
+        .and_then(|_| validate_finite("lon_deg", lon_deg))
+        .map_err(ItuError::from)?;
+    Ok(BicubicGrid2D::from_arrays(lat_grid, lon_grid, values)
+        .map_err(ItuError::from)?
+        .interp(lat_deg, lon_deg))
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1498,6 +1775,90 @@ impl IturModel {
         Ok(attenuation_db)
     }
 
+    fn gaseous_attenuation_terrestrial_path_db(
+        &self,
+        path_length_km: f64,
+        freq_ghz: f64,
+        rho_gm3: f64,
+        pressure_hpa: f64,
+        temp_k: f64,
+        mode: GasPathMode,
+    ) -> Result<f64, String> {
+        let gamma = match mode {
+            GasPathMode::Approximate => {
+                self.gamma0_exact_v13(freq_ghz, pressure_hpa, rho_gm3, temp_k)?
+                    + self.gammaw_exact_v13(freq_ghz, pressure_hpa, rho_gm3, temp_k)?
+            }
+            GasPathMode::Exact => self.gamma_exact_v13(freq_ghz, pressure_hpa, rho_gm3, temp_k)?,
+        };
+        Ok(gamma * path_length_km)
+    }
+
+    fn gaseous_attenuation_inclined_path_db(
+        &self,
+        freq_ghz: f64,
+        elevation_deg: f64,
+        rho_gm3: f64,
+        pressure_hpa: f64,
+        temp_k: f64,
+        h1_km: f64,
+        h2_km: f64,
+        mode: GasPathMode,
+    ) -> Result<f64, String> {
+        let rho = match mode {
+            GasPathMode::Approximate => rho_gm3 * (h1_km / 2.0).exp(),
+            GasPathMode::Exact => rho_gm3,
+        };
+        let gamma0 = self.gamma0_exact_v13(freq_ghz, pressure_hpa, rho, temp_k)?;
+        let gammaw = match mode {
+            GasPathMode::Approximate => {
+                self.gammaw_exact_v13(freq_ghz, pressure_hpa, rho, temp_k)?
+            }
+            GasPathMode::Exact => 0.0,
+        };
+
+        let e = rho * temp_k / 216.7;
+        let (h0, hw) = self.slant_inclined_path_equivalent_height_v13(
+            freq_ghz,
+            pressure_hpa + e,
+            rho,
+            temp_k,
+        )?;
+        let elevation_rad = elevation_deg.to_radians();
+
+        if elevation_deg > 5.0 && elevation_deg < 90.0 {
+            let h0_p = h0 * ((-h1_km / h0).exp() - (-h2_km / h0).exp());
+            let hw_p = hw * ((-h1_km / hw).exp() - (-h2_km / hw).exp());
+            return Ok((gamma0 * h0_p + gammaw * hw_p) / elevation_rad.sin());
+        }
+
+        fn f_factor(x: f64) -> f64 {
+            1.0 / (0.661 * x + 0.339 * (x.powi(2) + 5.51).sqrt())
+        }
+
+        let re_km = 8500.0;
+        let el2 = (((re_km + h1_km) / (re_km + h2_km)) * elevation_rad.cos())
+            .clamp(-1.0, 1.0)
+            .acos()
+            .to_degrees();
+        let xi = |el_deg: f64, h_km: f64, height_km: f64| {
+            el_deg.to_radians().tan() * ((re_km + h_km) / height_km).sqrt()
+        };
+        let eq_33 = |h_num: f64, h_den: f64, el_deg: f64, x: f64| {
+            (re_km + h_num).sqrt() * f_factor(x) * (-h_num / h_den).exp()
+                / el_deg.to_radians().cos()
+        };
+
+        Ok(gamma0
+            * h0.sqrt()
+            * (eq_33(h1_km, h0, elevation_deg, xi(elevation_deg, h1_km, h0))
+                - eq_33(h2_km, h0, el2, xi(el2, h2_km, h0)))
+            + gammaw
+                * hw.sqrt()
+                * (eq_33(h1_km, hw, elevation_deg, xi(elevation_deg, h1_km, hw))
+                    - eq_33(h2_km, hw, el2, xi(el2, h2_km, hw))))
+    }
+
     fn rain_specific_attenuation_coefficients(
         &self,
         freq_ghz: f64,
@@ -1655,6 +2016,211 @@ impl IturModel {
                     - 0.045 * a001.ln()
                     - beta * (1.0 - p) * elevation_rad.sin()),
             ))
+    }
+
+    fn rain_attenuation_probability_percent(
+        &self,
+        lat_deg: f64,
+        lon_deg: f64,
+        elevation_deg: f64,
+        hs_km: Option<f64>,
+        l_s_km: Option<f64>,
+        p0_percent: Option<f64>,
+    ) -> Result<f64, String> {
+        let re_km = 8500.0;
+        let hs = match hs_km {
+            Some(value) => value,
+            None => self.topographic_altitude_km(lat_deg, lon_deg)?,
+        };
+        let p0 = p0_percent.unwrap_or(self.rainfall_probability_percent(lat_deg, lon_deg)?) / 100.0;
+        if !(0.0..1.0).contains(&p0) {
+            return Err("p0_percent must be in (0, 100)".to_string());
+        }
+
+        let alpha = inverse_standard_normal_cdf(1.0 - p0);
+        let hr = self.rain_height_km(lat_deg, lon_deg)?;
+        let elevation_rad = elevation_deg.to_radians();
+        let l_s = if let Some(path_km) = l_s_km {
+            path_km
+        } else if elevation_deg >= 5.0 {
+            (hr - hs) / elevation_rad.sin()
+        } else {
+            2.0 * (hr - hs)
+                / ((elevation_rad.sin().powi(2) + 2.0 * (hr - hs) / re_km).sqrt()
+                    + elevation_rad.sin())
+        };
+        let d = l_s * elevation_rad.cos();
+        let rho = 0.59 * (-d.abs() / 31.0).exp() + 0.41 * (-d.abs() / 800.0).exp();
+        let c_b = bivariate_normal_ccdf(alpha, alpha, rho);
+        let probability = 1.0 - (1.0 - p0) * ((c_b - p0.powi(2)) / (p0 * (1.0 - p0))).powf(p0);
+        Ok(100.0 * probability)
+    }
+
+    fn fit_rain_attenuation_to_lognormal(
+        &self,
+        lat_deg: f64,
+        lon_deg: f64,
+        freq_ghz: f64,
+        elevation_deg: f64,
+        hs_km: f64,
+        p_k_percent: f64,
+        tau_deg: f64,
+    ) -> Result<(f64, f64), String> {
+        let mut n = 0.0;
+        let mut sum_x = 0.0;
+        let mut sum_y = 0.0;
+        let mut sum_xx = 0.0;
+        let mut sum_xy = 0.0;
+        for p_i in [
+            0.01, 0.02, 0.03, 0.05, 0.1, 0.2, 0.3, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0,
+        ] {
+            if p_i >= p_k_percent {
+                continue;
+            }
+            let attenuation = self.rain_attenuation_db(
+                lat_deg,
+                lon_deg,
+                freq_ghz,
+                elevation_deg,
+                hs_km,
+                p_i,
+                None,
+                tau_deg,
+                None,
+            )?;
+            let x = inverse_standard_normal_cdf(1.0 - p_i / p_k_percent);
+            let y = attenuation.ln();
+            n += 1.0;
+            sum_x += x;
+            sum_y += y;
+            sum_xx += x * x;
+            sum_xy += x * y;
+        }
+        if n < 2.0 {
+            return Err(
+                "p_k_percent must be greater than at least two fit probabilities".to_string(),
+            );
+        }
+        let denom = n * sum_xx - sum_x * sum_x;
+        if denom.abs() < 1e-15 {
+            return Err("lognormal fit is ill-conditioned".to_string());
+        }
+        let sigma = (n * sum_xy - sum_x * sum_y) / denom;
+        let mean = (sum_y - sigma * sum_x) / n;
+        Ok((sigma, mean))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn site_diversity_rain_outage_probability_percent(
+        &self,
+        lat1_deg: f64,
+        lon1_deg: f64,
+        a1_db: f64,
+        elevation1_deg: f64,
+        lat2_deg: f64,
+        lon2_deg: f64,
+        a2_db: f64,
+        elevation2_deg: f64,
+        freq_ghz: f64,
+        tau_deg: f64,
+        hs1_km: Option<f64>,
+        hs2_km: Option<f64>,
+    ) -> Result<f64, String> {
+        let d = haversine_distance_km(lat1_deg, lon1_deg, lat2_deg, lon2_deg);
+        let rho_r = 0.7 * (-d / 60.0).exp() + 0.3 * (-(d / 700.0).powi(2)).exp();
+
+        let p1 = self.rainfall_probability_percent(lat1_deg, lon1_deg)? / 100.0;
+        let p2 = self.rainfall_probability_percent(lat2_deg, lon2_deg)? / 100.0;
+        let r1 = inverse_standard_normal_cdf(1.0 - p1);
+        let r2 = inverse_standard_normal_cdf(1.0 - p2);
+        let p_r = bivariate_normal_ccdf(r1, r2, rho_r);
+
+        let hs1 = match hs1_km {
+            Some(value) => value,
+            None => self.topographic_altitude_km(lat1_deg, lon1_deg)?,
+        };
+        let hs2 = match hs2_km {
+            Some(value) => value,
+            None => self.topographic_altitude_km(lat2_deg, lon2_deg)?,
+        };
+        let (sigma1, mean1) = self.fit_rain_attenuation_to_lognormal(
+            lat1_deg,
+            lon1_deg,
+            freq_ghz,
+            elevation1_deg,
+            hs1,
+            p1 * 100.0,
+            tau_deg,
+        )?;
+        let (sigma2, mean2) = self.fit_rain_attenuation_to_lognormal(
+            lat2_deg,
+            lon2_deg,
+            freq_ghz,
+            elevation2_deg,
+            hs2,
+            p2 * 100.0,
+            tau_deg,
+        )?;
+
+        let rho_a = 0.94 * (-d / 30.0).exp() + 0.06 * (-(d / 500.0).powi(2)).exp();
+        let lim1 = (a1_db.ln() - mean1) / sigma1;
+        let lim2 = (a2_db.ln() - mean2) / sigma2;
+        let p_a = bivariate_normal_ccdf(lim1, lim2, rho_a);
+        Ok(100.0 * p_r * p_a)
+    }
+
+    fn rain_cross_polarization_discrimination_db(
+        &self,
+        attenuation_db: f64,
+        freq_ghz: f64,
+        elevation_deg: f64,
+        p: f64,
+        tau_deg: f64,
+    ) -> f64 {
+        let mut freq = freq_ghz;
+        let freq_orig = freq;
+        let scale_to_orig_freq = (4.0..6.0).contains(&freq);
+        if scale_to_orig_freq {
+            freq = 6.0;
+        }
+
+        let c_f = if freq < 9.0 {
+            60.0 * freq.log10() - 28.3
+        } else if freq < 36.0 {
+            26.0 * freq.log10() + 4.1
+        } else {
+            35.9 * freq.log10() - 11.3
+        };
+
+        let v = if freq < 9.0 {
+            30.8 * freq.powf(-0.21)
+        } else if freq < 20.0 {
+            12.8 * freq.powf(0.19)
+        } else if freq < 40.0 {
+            22.6
+        } else {
+            13.0 * freq.powf(0.15)
+        };
+        let c_a = v * attenuation_db.log10();
+        let tau_term = 1.0 - 0.484 * (1.0 + (4.0 * tau_deg).to_radians().cos());
+        let c_tau = -10.0 * tau_term.log10();
+        let c_theta = -40.0 * elevation_deg.to_radians().cos().log10();
+        let c_sigma = if p <= 0.001 {
+            0.0053 * 15.0_f64.powi(2)
+        } else if p <= 0.01 {
+            0.0053 * 10.0_f64.powi(2)
+        } else if p <= 0.1 {
+            0.0053 * 5.0_f64.powi(2)
+        } else {
+            0.0
+        };
+        let xpd_rain = c_f - c_a + c_tau + c_theta + c_sigma;
+        let c_ice = xpd_rain * (0.3 + 0.1 * p.log10()) / 2.0;
+        let mut xpd = xpd_rain - c_ice;
+        if scale_to_orig_freq {
+            xpd -= 20.0 * (freq_orig / freq).log10();
+        }
+        xpd
     }
 
     fn cloud_liquid_mass_absorption_coefficient(&self, freq_ghz: f64) -> f64 {
@@ -2121,6 +2687,92 @@ fn searchsorted_right(axis: &[f64], x: f64) -> usize {
     axis.partition_point(|value| *value <= x)
 }
 
+fn nearest_axis_index(axis: &[f64], x: f64) -> usize {
+    let hi = axis.partition_point(|value| *value < x);
+    if hi == 0 {
+        0
+    } else if hi >= axis.len() {
+        axis.len() - 1
+    } else if (x - axis[hi - 1]).abs() <= (axis[hi] - x).abs() {
+        hi - 1
+    } else {
+        hi
+    }
+}
+
+fn validate_grid_shapes(
+    lat_grid: &Array2<f64>,
+    lon_grid: &Array2<f64>,
+    values: &Array2<f64>,
+) -> Result<(), String> {
+    if lat_grid.shape() != lon_grid.shape() || lat_grid.shape() != values.shape() {
+        return Err("lat_grid, lon_grid, and values must have the same shape".to_string());
+    }
+    if lat_grid.nrows() < 2 || lat_grid.ncols() < 2 {
+        return Err("grid must be at least 2x2".to_string());
+    }
+    if lat_grid
+        .iter()
+        .chain(lon_grid.iter())
+        .chain(values.iter())
+        .any(|value| !value.is_finite())
+    {
+        return Err("grid coordinates and values must be finite".to_string());
+    }
+    Ok(())
+}
+
+fn is_regular_grid_inner(lat_grid: &Array2<f64>, lon_grid: &Array2<f64>) -> Result<bool, String> {
+    if lat_grid.shape() != lon_grid.shape() {
+        return Err("lat_grid and lon_grid must have the same shape".to_string());
+    }
+    if lat_grid.nrows() < 2 || lat_grid.ncols() < 2 {
+        return Err("grid must be at least 2x2".to_string());
+    }
+    if lat_grid
+        .iter()
+        .chain(lon_grid.iter())
+        .any(|value| !value.is_finite())
+    {
+        return Err("grid coordinates must be finite".to_string());
+    }
+
+    let lon_step = lon_grid[[0, 1]] - lon_grid[[0, 0]];
+    let lat_step = lat_grid[[1, 0]] - lat_grid[[0, 0]];
+    if lon_step.abs() <= f64::EPSILON || lat_step.abs() <= f64::EPSILON {
+        return Ok(false);
+    }
+
+    let tol = 1e-5;
+    for row in 0..lat_grid.nrows() {
+        for col in 1..lat_grid.ncols() {
+            if !approx_equal(
+                lon_grid[[row, col]] - lon_grid[[row, col - 1]],
+                lon_step,
+                tol,
+            ) {
+                return Ok(false);
+            }
+        }
+    }
+    for row in 1..lat_grid.nrows() {
+        for col in 0..lat_grid.ncols() {
+            if !approx_equal(
+                lat_grid[[row, col]] - lat_grid[[row - 1, col]],
+                lat_step,
+                tol,
+            ) {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(true)
+}
+
+fn approx_equal(actual: f64, expected: f64, rtol: f64) -> bool {
+    (actual - expected).abs() <= rtol * expected.abs().max(1.0)
+}
+
 fn mod_360(lon_deg: f64) -> f64 {
     lon_deg.rem_euclid(360.0)
 }
@@ -2285,6 +2937,38 @@ fn erfc_approx(x: f64) -> f64 {
     if x >= 0.0 { r } else { 2.0 - r }
 }
 
+fn normal_ccdf(x: f64) -> f64 {
+    0.5 * erfc_approx(x / 2.0_f64.sqrt())
+}
+
+fn normal_pdf(x: f64) -> f64 {
+    (-0.5 * x * x).exp() / (2.0 * std::f64::consts::PI).sqrt()
+}
+
+fn bivariate_normal_ccdf(alpha_x: f64, alpha_y: f64, rho: f64) -> f64 {
+    let rho = rho.clamp(-0.999_999, 0.999_999);
+    let sigma = (1.0 - rho * rho).sqrt();
+    let lower = alpha_y.clamp(-10.0, 10.0);
+    let upper = 10.0;
+    if lower >= upper {
+        return 0.0;
+    }
+
+    let n = 4096;
+    let h = (upper - lower) / n as f64;
+    let integrand = |y: f64| normal_pdf(y) * normal_ccdf((alpha_x - rho * y) / sigma);
+    let mut sum = integrand(lower) + integrand(upper);
+    for idx in 1..n {
+        let y = lower + h * idx as f64;
+        sum += if idx % 2 == 0 {
+            2.0 * integrand(y)
+        } else {
+            4.0 * integrand(y)
+        };
+    }
+    (sum * h / 3.0).clamp(0.0, 1.0)
+}
+
 fn inverse_standard_normal_cdf(p: f64) -> f64 {
     const A: [f64; 6] = [
         -3.969_683_028_665_376e1,
@@ -2333,6 +3017,16 @@ fn inverse_standard_normal_cdf(p: f64) -> f64 {
         -(((((C[0] * q + C[1]) * q + C[2]) * q + C[3]) * q + C[4]) * q + C[5])
             / ((((D[0] * q + D[1]) * q + D[2]) * q + D[3]) * q + 1.0)
     }
+}
+
+fn haversine_distance_km(lat1_deg: f64, lon1_deg: f64, lat2_deg: f64, lon2_deg: f64) -> f64 {
+    let re_km = 6371.0;
+    let lat1 = lat1_deg.to_radians();
+    let lat2 = lat2_deg.to_radians();
+    let dlat = lat2 - lat1;
+    let dlon = (lon2_deg - lon1_deg).to_radians();
+    let a = (dlat / 2.0).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
+    2.0 * re_km * a.clamp(0.0, 1.0).sqrt().asin()
 }
 
 fn validate_common_inputs(
@@ -4362,6 +5056,80 @@ pub fn gamma_exact_db_per_km(
         .map_err(ItuError::from)
 }
 
+/// Computes the [P.676](https://www.itu.int/rec/R-REC-P.676) dry-air approximate compatibility attenuation in dB/km.
+///
+/// [P.676-13](https://www.itu.int/rec/R-REC-P.676) does not define a separate approximate `gamma0` formula, so this
+/// compatibility helper returns exact total specific attenuation, matching the
+/// behavior of [`python-itu-r`](https://github.com/inigodelportillo/ITU-Rpy).
+///
+/// # Parameters
+///
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `pressure_hpa`: atmospheric pressure in hPa. Must be positive.
+/// - `rho_gm3`: water-vapour density in g/m^3. Must be non-negative.
+/// - `temp_k`: absolute air temperature in kelvin. Must be positive.
+///
+/// # Returns
+///
+/// Dry-air specific attenuation in dB/km.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// let gamma0 = itu_rs::gamma0_approx_db_per_km(12.0, 1008.0, 7.5, 289.2)?;
+/// assert!(gamma0 >= 0.0);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn gamma0_approx_db_per_km(
+    freq_ghz: f64,
+    pressure_hpa: f64,
+    rho_gm3: f64,
+    temp_k: f64,
+) -> std::result::Result<f64, ItuError> {
+    gamma_exact_db_per_km(freq_ghz, pressure_hpa, rho_gm3, temp_k)
+}
+
+/// Computes the [P.676](https://www.itu.int/rec/R-REC-P.676) water-vapour approximate specific attenuation in dB/km.
+///
+/// [P.676-13](https://www.itu.int/rec/R-REC-P.676) does not define a separate approximate `gammaw` formula, so this
+/// compatibility helper returns the exact total specific attenuation, matching
+/// the behavior of [`python-itu-r`](https://github.com/inigodelportillo/ITU-Rpy).
+///
+/// # Parameters
+///
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `pressure_hpa`: atmospheric pressure in hPa. Must be positive.
+/// - `rho_gm3`: water-vapour density in g/m^3. Must be non-negative.
+/// - `temp_k`: absolute air temperature in kelvin. Must be positive.
+///
+/// # Returns
+///
+/// Specific gaseous attenuation in dB/km.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// let gammaw = itu_rs::gammaw_approx_db_per_km(12.0, 1008.0, 7.5, 289.2)?;
+/// assert!(gammaw >= 0.0);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn gammaw_approx_db_per_km(
+    freq_ghz: f64,
+    pressure_hpa: f64,
+    rho_gm3: f64,
+    temp_k: f64,
+) -> std::result::Result<f64, ItuError> {
+    gamma_exact_db_per_km(freq_ghz, pressure_hpa, rho_gm3, temp_k)
+}
+
 /// Computes [P.676](https://www.itu.int/rec/R-REC-P.676) equivalent heights for dry air and water vapour.
 ///
 /// Equivalent heights convert local specific gaseous attenuation into an
@@ -4555,6 +5323,141 @@ pub fn gaseous_attenuation_slant_path_db(
         .map_err(ItuError::from)
 }
 
+/// Computes gaseous attenuation on a terrestrial path from ITU-R [P.676](https://www.itu.int/rec/R-REC-P.676).
+///
+/// This multiplies local gaseous specific attenuation by path length for a
+/// terrestrial path through the same atmospheric state.
+///
+/// # Parameters
+///
+/// - `path_length_km`: terrestrial path length in kilometres. Must be
+///   non-negative.
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `elevation_deg`: path elevation angle in degrees. It is validated for
+///   consistency with other [P.676](https://www.itu.int/rec/R-REC-P.676) path APIs.
+/// - `rho_gm3`: water-vapour density in g/m^3. Must be non-negative.
+/// - `pressure_hpa`: atmospheric pressure in hPa. Must be positive.
+/// - `temp_k`: absolute air temperature in kelvin. Must be positive.
+/// - `mode`: approximate or exact [P.676](https://www.itu.int/rec/R-REC-P.676) path mode.
+///
+/// # Returns
+///
+/// Gaseous attenuation in dB.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// let attenuation_db = itu_rs::gaseous_attenuation_terrestrial_path_db(
+///     10.0, 12.0, 30.0, 7.5, 1008.0, 289.2, itu_rs::GasPathMode::Approximate,
+/// )?;
+/// assert!(attenuation_db >= 0.0);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn gaseous_attenuation_terrestrial_path_db(
+    path_length_km: f64,
+    freq_ghz: f64,
+    elevation_deg: f64,
+    rho_gm3: f64,
+    pressure_hpa: f64,
+    temp_k: f64,
+    mode: GasPathMode,
+) -> std::result::Result<f64, ItuError> {
+    validate_nonnegative("path_length_km", path_length_km)
+        .and_then(|_| validate_positive("freq_ghz", freq_ghz))
+        .and_then(|_| validate_elevation_deg(elevation_deg))
+        .and_then(|_| validate_nonnegative("rho_gm3", rho_gm3))
+        .and_then(|_| validate_positive("pressure_hpa", pressure_hpa))
+        .and_then(|_| validate_positive("temp_k", temp_k))
+        .map_err(ItuError::from)?;
+    model()
+        .map_err(ItuError::from)?
+        .gaseous_attenuation_terrestrial_path_db(
+            path_length_km,
+            freq_ghz,
+            rho_gm3,
+            pressure_hpa,
+            temp_k,
+            mode,
+        )
+        .map_err(ItuError::from)
+}
+
+/// Computes gaseous attenuation on an inclined path from ITU-R [P.676](https://www.itu.int/rec/R-REC-P.676).
+///
+/// The path starts at `h1_km` and ends at `h2_km`, both above mean sea level.
+/// [P.676](https://www.itu.int/rec/R-REC-P.676) restricts this method to terminal heights up to 10 km.
+///
+/// # Parameters
+///
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `elevation_deg`: path elevation angle in degrees, in `(0, 90)`.
+/// - `rho_gm3`: water-vapour density in g/m^3. Must be non-negative.
+/// - `pressure_hpa`: atmospheric pressure in hPa. Must be positive.
+/// - `temp_k`: absolute air temperature in kelvin. Must be positive.
+/// - `h1_km`: transmitter altitude in kilometres. Must be in `[0, 10]`.
+/// - `h2_km`: receiver altitude in kilometres. Must be in `[0, 10]`.
+/// - `mode`: approximate or exact [P.676](https://www.itu.int/rec/R-REC-P.676) path mode.
+///
+/// # Returns
+///
+/// Gaseous attenuation in dB.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// let attenuation_db = itu_rs::gaseous_attenuation_inclined_path_db(
+///     12.0, 30.0, 7.5, 1008.0, 289.2, 0.4, 2.0, itu_rs::GasPathMode::Approximate,
+/// )?;
+/// assert!(attenuation_db.is_finite());
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[allow(clippy::too_many_arguments)]
+pub fn gaseous_attenuation_inclined_path_db(
+    freq_ghz: f64,
+    elevation_deg: f64,
+    rho_gm3: f64,
+    pressure_hpa: f64,
+    temp_k: f64,
+    h1_km: f64,
+    h2_km: f64,
+    mode: GasPathMode,
+) -> std::result::Result<f64, ItuError> {
+    validate_positive("freq_ghz", freq_ghz)
+        .and_then(|_| validate_elevation_deg(elevation_deg))
+        .and_then(|_| validate_nonnegative("rho_gm3", rho_gm3))
+        .and_then(|_| validate_positive("pressure_hpa", pressure_hpa))
+        .and_then(|_| validate_positive("temp_k", temp_k))
+        .and_then(|_| validate_nonnegative("h1_km", h1_km))
+        .and_then(|_| validate_nonnegative("h2_km", h2_km))
+        .map_err(ItuError::from)?;
+    if h1_km > 10.0 || h2_km > 10.0 {
+        return Err(ItuError::from(
+            "h1_km and h2_km must be <= 10 for P.676 inclined paths".to_string(),
+        ));
+    }
+    model()
+        .map_err(ItuError::from)?
+        .gaseous_attenuation_inclined_path_db(
+            freq_ghz,
+            elevation_deg,
+            rho_gm3,
+            pressure_hpa,
+            temp_k,
+            h1_km,
+            h2_km,
+            mode,
+        )
+        .map_err(ItuError::from)
+}
+
 /// Computes rain attenuation from ITU-R [P.618](https://www.itu.int/rec/R-REC-P.618).
 ///
 /// Rain attenuation is the fade contribution from precipitation along the
@@ -4638,6 +5541,300 @@ pub fn rain_attenuation_db(
             l_s_km,
         )
         .map_err(ItuError::from)
+}
+
+/// Computes rain-attenuation occurrence probability from ITU-R [P.618](https://www.itu.int/rec/R-REC-P.618).
+///
+/// This estimates the probability that rain attenuation occurs on the slant
+/// path, using [P.837](https://www.itu.int/rec/R-REC-P.837) rain probability by default.
+///
+/// # Parameters
+///
+/// - `lat_deg`: station geodetic latitude in degrees, in `[-90, 90]`.
+/// - `lon_deg`: station geodetic longitude in degrees.
+/// - `elevation_deg`: path elevation angle in degrees, in `(0, 90)`.
+/// - `hs_km`: optional station altitude in kilometres. When `None`, [P.1511](https://www.itu.int/rec/R-REC-P.1511)
+///   topographic altitude is used.
+/// - `l_s_km`: optional slant-path length through rain in kilometres.
+/// - `p0_percent`: optional rain probability at the station in percent.
+///
+/// # Returns
+///
+/// Probability of rain attenuation on the slant path in percent.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("data/837/v7_mt_month01.npz").exists()
+/// # }
+/// # if data_available() {
+/// let p = itu_rs::rain_attenuation_probability_percent(
+///     45.4215, -75.6972, 30.0, Some(0.4), None, None,
+/// )?;
+/// assert!(p >= 0.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn rain_attenuation_probability_percent(
+    lat_deg: f64,
+    lon_deg: f64,
+    elevation_deg: f64,
+    hs_km: Option<f64>,
+    l_s_km: Option<f64>,
+    p0_percent: Option<f64>,
+) -> std::result::Result<f64, ItuError> {
+    validate_lat_lon(lat_deg, lon_deg)
+        .and_then(|_| validate_elevation_deg(elevation_deg))
+        .and_then(|_| validate_optional_positive("l_s_km", l_s_km))
+        .map_err(ItuError::from)?;
+    if let Some(hs_km) = hs_km {
+        validate_finite("hs_km", hs_km).map_err(ItuError::from)?;
+    }
+    if let Some(p0_percent) = p0_percent {
+        validate_positive("p0_percent", p0_percent).map_err(ItuError::from)?;
+        if p0_percent >= 100.0 {
+            return Err(ItuError::from("p0_percent must be in (0, 100)".to_string()));
+        }
+    }
+    model()
+        .map_err(ItuError::from)?
+        .rain_attenuation_probability_percent(
+            lat_deg,
+            lon_deg,
+            elevation_deg,
+            hs_km,
+            l_s_km,
+            p0_percent,
+        )
+        .map_err(ItuError::from)
+}
+
+/// Fits [P.618](https://www.itu.int/rec/R-REC-P.618) rain attenuation statistics to a lognormal model.
+///
+/// The fit relates rain attenuation exceeded probabilities below `p_k_percent`
+/// to log attenuation values.
+///
+/// # Parameters
+///
+/// - `lat_deg`: station geodetic latitude in degrees, in `[-90, 90]`.
+/// - `lon_deg`: station geodetic longitude in degrees.
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `elevation_deg`: path elevation angle in degrees, in `(0, 90)`.
+/// - `hs_km`: station altitude in kilometres.
+/// - `p_k_percent`: rain occurrence probability threshold in percent.
+/// - `tau_deg`: polarization tilt angle in degrees, in `[0, 90]`.
+///
+/// # Returns
+///
+/// `(sigma_ln_a, m_ln_a)`, the standard deviation and mean of the fitted
+/// logarithmic attenuation distribution.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation, the fit is underdetermined, or
+/// model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("data/837/v7_lat_r001.npz").exists()
+/// # }
+/// # if data_available() {
+/// let (sigma, mean) = itu_rs::fit_rain_attenuation_to_lognormal(
+///     45.4215, -75.6972, 12.0, 30.0, 0.4, 10.0, 45.0,
+/// )?;
+/// assert!(sigma.is_finite());
+/// assert!(mean.is_finite());
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn fit_rain_attenuation_to_lognormal(
+    lat_deg: f64,
+    lon_deg: f64,
+    freq_ghz: f64,
+    elevation_deg: f64,
+    hs_km: f64,
+    p_k_percent: f64,
+    tau_deg: f64,
+) -> std::result::Result<(f64, f64), ItuError> {
+    validate_lat_lon(lat_deg, lon_deg)
+        .and_then(|_| validate_positive("freq_ghz", freq_ghz))
+        .and_then(|_| validate_elevation_deg(elevation_deg))
+        .and_then(|_| validate_finite("hs_km", hs_km))
+        .and_then(|_| validate_positive("p_k_percent", p_k_percent))
+        .and_then(|_| validate_tau_deg(tau_deg))
+        .map_err(ItuError::from)?;
+    model()
+        .map_err(ItuError::from)?
+        .fit_rain_attenuation_to_lognormal(
+            lat_deg,
+            lon_deg,
+            freq_ghz,
+            elevation_deg,
+            hs_km,
+            p_k_percent,
+            tau_deg,
+        )
+        .map_err(ItuError::from)
+}
+
+/// Computes [P.618](https://www.itu.int/rec/R-REC-P.618) site-diversity rain outage probability.
+///
+/// This estimates the joint probability that both Earth-space paths exceed
+/// their specified rain attenuation thresholds.
+///
+/// # Parameters
+///
+/// - `lat1_deg`, `lon1_deg`: first station coordinates in degrees.
+/// - `a1_db`: first path attenuation threshold in dB. Must be positive.
+/// - `elevation1_deg`: first path elevation angle in degrees.
+/// - `lat2_deg`, `lon2_deg`: second station coordinates in degrees.
+/// - `a2_db`: second path attenuation threshold in dB. Must be positive.
+/// - `elevation2_deg`: second path elevation angle in degrees.
+/// - `freq_ghz`: carrier frequency in GHz. Must be positive.
+/// - `tau_deg`: polarization tilt angle in degrees, in `[0, 90]`.
+/// - `hs1_km`, `hs2_km`: optional station altitudes in kilometres.
+///
+/// # Returns
+///
+/// Joint outage probability in percent.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation or model data cannot be loaded.
+///
+/// # Example
+///
+/// ```
+/// # fn data_available() -> bool {
+/// #     cfg!(feature = "data")
+/// #         || std::env::var_os("ITU_RS_DATA_DIR").is_some()
+/// #         || std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("data/837/v7_mt_month01.npz").exists()
+/// # }
+/// # if data_available() {
+/// let outage = itu_rs::site_diversity_rain_outage_probability_percent(
+///     45.4215, -75.6972, 5.0, 30.0,
+///     45.6215, -75.3972, 5.0, 30.0,
+///     12.0, 45.0, Some(0.4), Some(0.4),
+/// )?;
+/// assert!(outage >= 0.0);
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[allow(clippy::too_many_arguments)]
+pub fn site_diversity_rain_outage_probability_percent(
+    lat1_deg: f64,
+    lon1_deg: f64,
+    a1_db: f64,
+    elevation1_deg: f64,
+    lat2_deg: f64,
+    lon2_deg: f64,
+    a2_db: f64,
+    elevation2_deg: f64,
+    freq_ghz: f64,
+    tau_deg: f64,
+    hs1_km: Option<f64>,
+    hs2_km: Option<f64>,
+) -> std::result::Result<f64, ItuError> {
+    validate_lat_lon(lat1_deg, lon1_deg)
+        .and_then(|_| validate_lat_lon(lat2_deg, lon2_deg))
+        .and_then(|_| validate_positive("a1_db", a1_db))
+        .and_then(|_| validate_positive("a2_db", a2_db))
+        .and_then(|_| validate_elevation_deg(elevation1_deg))
+        .and_then(|_| validate_elevation_deg(elevation2_deg))
+        .and_then(|_| validate_positive("freq_ghz", freq_ghz))
+        .and_then(|_| validate_tau_deg(tau_deg))
+        .map_err(ItuError::from)?;
+    if let Some(hs1_km) = hs1_km {
+        validate_finite("hs1_km", hs1_km).map_err(ItuError::from)?;
+    }
+    if let Some(hs2_km) = hs2_km {
+        validate_finite("hs2_km", hs2_km).map_err(ItuError::from)?;
+    }
+    model()
+        .map_err(ItuError::from)?
+        .site_diversity_rain_outage_probability_percent(
+            lat1_deg,
+            lon1_deg,
+            a1_db,
+            elevation1_deg,
+            lat2_deg,
+            lon2_deg,
+            a2_db,
+            elevation2_deg,
+            freq_ghz,
+            tau_deg,
+            hs1_km,
+            hs2_km,
+        )
+        .map_err(ItuError::from)
+}
+
+/// Computes rain cross-polarization discrimination from ITU-R [P.618](https://www.itu.int/rec/R-REC-P.618).
+///
+/// This converts co-polar rain attenuation statistics into the rain-plus-ice
+/// cross-polarization discrimination not exceeded for `p` percent of time.
+///
+/// # Parameters
+///
+/// - `attenuation_db`: co-polar rain attenuation in dB. Must be positive.
+/// - `freq_ghz`: carrier frequency in GHz. Must be in `[4, 55]`.
+/// - `elevation_deg`: path elevation angle in degrees, in `(0, 90)`.
+/// - `p`: percentage of time. Must be positive.
+/// - `tau_deg`: polarization tilt angle in degrees, in `[0, 90]`.
+///
+/// # Returns
+///
+/// Cross-polarization discrimination in dB.
+///
+/// # Errors
+///
+/// Returns an error if inputs fail validation.
+///
+/// # Example
+///
+/// ```
+/// let xpd_db = itu_rs::rain_cross_polarization_discrimination_db(
+///     10.0, 12.0, 30.0, 0.1, 45.0,
+/// )?;
+/// assert!(xpd_db.is_finite());
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn rain_cross_polarization_discrimination_db(
+    attenuation_db: f64,
+    freq_ghz: f64,
+    elevation_deg: f64,
+    p: f64,
+    tau_deg: f64,
+) -> std::result::Result<f64, ItuError> {
+    validate_positive("attenuation_db", attenuation_db)
+        .and_then(|_| validate_positive("freq_ghz", freq_ghz))
+        .and_then(|_| validate_elevation_deg(elevation_deg))
+        .and_then(|_| validate_p(p))
+        .and_then(|_| validate_tau_deg(tau_deg))
+        .map_err(ItuError::from)?;
+    if !(4.0..=55.0).contains(&freq_ghz) {
+        return Err(ItuError::from("freq_ghz must be in [4, 55]".to_string()));
+    }
+    Ok(model()
+        .map_err(ItuError::from)?
+        .rain_cross_polarization_discrimination_db(
+            attenuation_db,
+            freq_ghz,
+            elevation_deg,
+            p,
+            tau_deg,
+        ))
 }
 
 #[allow(clippy::too_many_arguments)]

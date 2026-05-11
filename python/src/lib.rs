@@ -5,7 +5,9 @@ use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyAny;
 
+use ndarray::Array2;
 use itu_rs_core::{
+    GasPathMode as CoreGasPathMode,
     HydrometeorType as CoreHydrometeorType, SlantPathContributions as CoreSlantPathContributions,
     SlantPathOptions as CoreSlantPathOptions,
 };
@@ -294,6 +296,95 @@ fn parse_hydrometeor(value: &Bound<'_, PyAny>) -> PyResult<CoreHydrometeorType> 
     ))
 }
 
+fn parse_gas_path_mode(value: &Bound<'_, PyAny>) -> PyResult<CoreGasPathMode> {
+    if let Ok(exact) = value.extract::<bool>() {
+        return Ok(if exact {
+            CoreGasPathMode::Exact
+        } else {
+            CoreGasPathMode::Approximate
+        });
+    }
+    if let Ok(text) = value.extract::<String>() {
+        return match text.to_ascii_lowercase().as_str() {
+            "approx" | "approximate" => Ok(CoreGasPathMode::Approximate),
+            "exact" => Ok(CoreGasPathMode::Exact),
+            _ => Err(PyValueError::new_err(
+                "mode must be 'approximate', 'exact', false, or true",
+            )),
+        };
+    }
+    Err(PyTypeError::new_err(
+        "mode must be 'approximate', 'exact', false, or true",
+    ))
+}
+
+fn array2_from_rows(rows: Vec<Vec<f64>>, name: &str) -> PyResult<Array2<f64>> {
+    let nrows = rows.len();
+    let ncols = rows.first().map_or(0, Vec::len);
+    if nrows == 0 || ncols == 0 {
+        return Err(PyValueError::new_err(format!("{name} must not be empty")));
+    }
+    if rows.iter().any(|row| row.len() != ncols) {
+        return Err(PyValueError::new_err(format!(
+            "{name} rows must all have the same length"
+        )));
+    }
+    Array2::from_shape_vec((nrows, ncols), rows.into_iter().flatten().collect())
+        .map_err(|err| PyValueError::new_err(format!("invalid {name}: {err}")))
+}
+
+#[pyfunction]
+fn is_regular_grid(lat_grid: Vec<Vec<f64>>, lon_grid: Vec<Vec<f64>>) -> PyResult<bool> {
+    let lat_grid = array2_from_rows(lat_grid, "lat_grid")?;
+    let lon_grid = array2_from_rows(lon_grid, "lon_grid")?;
+    itu_rs_core::is_regular_grid(&lat_grid, &lon_grid).map_err(into_py_err)
+}
+
+#[pyfunction]
+fn nearest_2d_interpolate(
+    lat_grid: Vec<Vec<f64>>,
+    lon_grid: Vec<Vec<f64>>,
+    values: Vec<Vec<f64>>,
+    lat_deg: f64,
+    lon_deg: f64,
+) -> PyResult<f64> {
+    let lat_grid = array2_from_rows(lat_grid, "lat_grid")?;
+    let lon_grid = array2_from_rows(lon_grid, "lon_grid")?;
+    let values = array2_from_rows(values, "values")?;
+    itu_rs_core::nearest_2d_interpolate(&lat_grid, &lon_grid, &values, lat_deg, lon_deg)
+        .map_err(into_py_err)
+}
+
+#[pyfunction]
+fn bilinear_2d_interpolate(
+    lat_grid: Vec<Vec<f64>>,
+    lon_grid: Vec<Vec<f64>>,
+    values: Vec<Vec<f64>>,
+    lat_deg: f64,
+    lon_deg: f64,
+) -> PyResult<f64> {
+    let lat_grid = array2_from_rows(lat_grid, "lat_grid")?;
+    let lon_grid = array2_from_rows(lon_grid, "lon_grid")?;
+    let values = array2_from_rows(values, "values")?;
+    itu_rs_core::bilinear_2d_interpolate(&lat_grid, &lon_grid, &values, lat_deg, lon_deg)
+        .map_err(into_py_err)
+}
+
+#[pyfunction]
+fn bicubic_2d_interpolate(
+    lat_grid: Vec<Vec<f64>>,
+    lon_grid: Vec<Vec<f64>>,
+    values: Vec<Vec<f64>>,
+    lat_deg: f64,
+    lon_deg: f64,
+) -> PyResult<f64> {
+    let lat_grid = array2_from_rows(lat_grid, "lat_grid")?;
+    let lon_grid = array2_from_rows(lon_grid, "lon_grid")?;
+    let values = array2_from_rows(values, "values")?;
+    itu_rs_core::bicubic_2d_interpolate(&lat_grid, &lon_grid, &values, lat_deg, lon_deg)
+        .map_err(into_py_err)
+}
+
 py_result_fn!(fn topographic_altitude_km(lat_deg: f64, lon_deg: f64) -> f64 => itu_rs_core::topographic_altitude_km);
 py_result_fn!(fn surface_mean_temperature_k(lat_deg: f64, lon_deg: f64) -> f64 => itu_rs_core::surface_mean_temperature_k);
 py_result_fn!(fn surface_month_mean_temperature_k(lat_deg: f64, lon_deg: f64, month: u8) -> f64 => itu_rs_core::surface_month_mean_temperature_k);
@@ -331,10 +422,16 @@ py_result_fn!(fn risk_of_exceedance(p_fraction: f64, pr_fraction: f64, lat_deg: 
 py_result_fn!(fn gamma0_exact_db_per_km(freq_ghz: f64, pressure_hpa: f64, rho_gm3: f64, temp_k: f64) -> f64 => itu_rs_core::gamma0_exact_db_per_km);
 py_result_fn!(fn gammaw_exact_db_per_km(freq_ghz: f64, pressure_hpa: f64, rho_gm3: f64, temp_k: f64) -> f64 => itu_rs_core::gammaw_exact_db_per_km);
 py_result_fn!(fn gamma_exact_db_per_km(freq_ghz: f64, pressure_hpa: f64, rho_gm3: f64, temp_k: f64) -> f64 => itu_rs_core::gamma_exact_db_per_km);
+py_result_fn!(fn gamma0_approx_db_per_km(freq_ghz: f64, pressure_hpa: f64, rho_gm3: f64, temp_k: f64) -> f64 => itu_rs_core::gamma0_approx_db_per_km);
+py_result_fn!(fn gammaw_approx_db_per_km(freq_ghz: f64, pressure_hpa: f64, rho_gm3: f64, temp_k: f64) -> f64 => itu_rs_core::gammaw_approx_db_per_km);
 py_result_fn!(fn slant_inclined_path_equivalent_height_km(freq_ghz: f64, pressure_hpa: f64, rho_gm3: f64, temp_k: f64) -> (f64, f64) => itu_rs_core::slant_inclined_path_equivalent_height_km);
 py_result_fn!(fn zenith_water_vapour_attenuation_db(freq_ghz: f64, v_t_kgm2: f64, h_km: f64) -> f64 => itu_rs_core::zenith_water_vapour_attenuation_db);
 py_result_fn!(fn gaseous_attenuation_slant_path_db(freq_ghz: f64, elevation_deg: f64, rho_gm3: f64, pressure_hpa: f64, temp_k: f64, v_t_kgm2: f64, h_km: f64, exact: bool) -> f64 => itu_rs_core::gaseous_attenuation_slant_path_db);
+py_result_fn!(fn rain_attenuation_probability_percent(lat_deg: f64, lon_deg: f64, elevation_deg: f64, hs_km: Option<f64>, l_s_km: Option<f64>, p0_percent: Option<f64>) -> f64 => itu_rs_core::rain_attenuation_probability_percent);
+py_result_fn!(fn fit_rain_attenuation_to_lognormal(lat_deg: f64, lon_deg: f64, freq_ghz: f64, elevation_deg: f64, hs_km: f64, p_k_percent: f64, tau_deg: f64) -> (f64, f64) => itu_rs_core::fit_rain_attenuation_to_lognormal);
 py_result_fn!(fn rain_attenuation_db(lat_deg: f64, lon_deg: f64, freq_ghz: f64, elevation_deg: f64, hs_km: f64, p: f64, r001_mmh: Option<f64>, tau_deg: f64, l_s_km: Option<f64>) -> f64 => itu_rs_core::rain_attenuation_db);
+py_result_fn!(fn site_diversity_rain_outage_probability_percent(lat1_deg: f64, lon1_deg: f64, a1_db: f64, elevation1_deg: f64, lat2_deg: f64, lon2_deg: f64, a2_db: f64, elevation2_deg: f64, freq_ghz: f64, tau_deg: f64, hs1_km: Option<f64>, hs2_km: Option<f64>) -> f64 => itu_rs_core::site_diversity_rain_outage_probability_percent);
+py_result_fn!(fn rain_cross_polarization_discrimination_db(attenuation_db: f64, freq_ghz: f64, elevation_deg: f64, p: f64, tau_deg: f64) -> f64 => itu_rs_core::rain_cross_polarization_discrimination_db);
 py_result_fn!(fn scintillation_sigma_db(lat_deg: f64, lon_deg: f64, freq_ghz: f64, elevation_deg: f64, dish_m: f64, eta: f64, temp_c: Option<f64>, humidity_percent: Option<f64>, pressure_hpa: Option<f64>, h_l_m: f64) -> f64 => itu_rs_core::scintillation_sigma_db);
 py_result_fn!(fn scintillation_attenuation_db(lat_deg: f64, lon_deg: f64, freq_ghz: f64, elevation_deg: f64, p: f64, dish_m: f64, eta: f64, temp_c: Option<f64>, humidity_percent: Option<f64>, pressure_hpa: Option<f64>, h_l_m: f64) -> f64 => itu_rs_core::scintillation_attenuation_db);
 py_result_fn!(fn gas_attenuation_default(lat_deg: f64, lon_deg: f64, freq_ghz: f64, elevation_deg: f64, p: f64, d_m: f64) -> f64 => itu_rs_core::gas_attenuation_default);
@@ -349,6 +446,52 @@ fn saturation_vapour_pressure_hpa(
         temp_c,
         pressure_hpa,
         parse_hydrometeor(hydrometeor)?,
+    )
+    .map_err(into_py_err)
+}
+
+#[pyfunction]
+fn gaseous_attenuation_terrestrial_path_db(
+    path_length_km: f64,
+    freq_ghz: f64,
+    elevation_deg: f64,
+    rho_gm3: f64,
+    pressure_hpa: f64,
+    temp_k: f64,
+    mode: &Bound<'_, PyAny>,
+) -> PyResult<f64> {
+    itu_rs_core::gaseous_attenuation_terrestrial_path_db(
+        path_length_km,
+        freq_ghz,
+        elevation_deg,
+        rho_gm3,
+        pressure_hpa,
+        temp_k,
+        parse_gas_path_mode(mode)?,
+    )
+    .map_err(into_py_err)
+}
+
+#[pyfunction]
+fn gaseous_attenuation_inclined_path_db(
+    freq_ghz: f64,
+    elevation_deg: f64,
+    rho_gm3: f64,
+    pressure_hpa: f64,
+    temp_k: f64,
+    h1_km: f64,
+    h2_km: f64,
+    mode: &Bound<'_, PyAny>,
+) -> PyResult<f64> {
+    itu_rs_core::gaseous_attenuation_inclined_path_db(
+        freq_ghz,
+        elevation_deg,
+        rho_gm3,
+        pressure_hpa,
+        temp_k,
+        h1_km,
+        h2_km,
+        parse_gas_path_mode(mode)?,
     )
     .map_err(into_py_err)
 }
@@ -457,6 +600,10 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     add_py_functions!(
         m,
         [
+            is_regular_grid,
+            nearest_2d_interpolate,
+            bilinear_2d_interpolate,
+            bicubic_2d_interpolate,
             topographic_altitude_km,
             surface_mean_temperature_k,
             surface_month_mean_temperature_k,
@@ -492,10 +639,18 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
             gamma0_exact_db_per_km,
             gammaw_exact_db_per_km,
             gamma_exact_db_per_km,
+            gamma0_approx_db_per_km,
+            gammaw_approx_db_per_km,
             slant_inclined_path_equivalent_height_km,
             zenith_water_vapour_attenuation_db,
             gaseous_attenuation_slant_path_db,
+            gaseous_attenuation_terrestrial_path_db,
+            gaseous_attenuation_inclined_path_db,
+            rain_attenuation_probability_percent,
+            fit_rain_attenuation_to_lognormal,
             rain_attenuation_db,
+            site_diversity_rain_outage_probability_percent,
+            rain_cross_polarization_discrimination_db,
             scintillation_sigma_db,
             scintillation_attenuation_db,
             gas_attenuation_default,

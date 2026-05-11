@@ -1,21 +1,26 @@
 use itu_rs::{
-    HydrometeorType, SlantPathOptions, atmospheric_attenuation_slant_path,
-    atmospheric_attenuation_slant_path_many, cloud_attenuation_db, cloud_attenuation_lognormal_db,
-    cloud_liquid_mass_absorption_coefficient, cloud_reduced_liquid_kgm2,
-    cloud_specific_attenuation_coefficient, dn1, dn65, dry_term_radio_refractivity,
-    gamma_exact_db_per_km, gamma0_exact_db_per_km, gammaw_exact_db_per_km, gas_attenuation_default,
-    gas_attenuation_default_many_checked, gaseous_attenuation_slant_path_db,
-    inter_annual_variability, lognormal_approximation_coefficients,
-    map_wet_term_radio_refractivity, radio_refractive_index, rain_attenuation_db, rain_height_km,
+    GasPathMode, HydrometeorType, SlantPathOptions, atmospheric_attenuation_slant_path,
+    atmospheric_attenuation_slant_path_many, bicubic_2d_interpolate, bilinear_2d_interpolate,
+    cloud_attenuation_db, cloud_attenuation_lognormal_db, cloud_liquid_mass_absorption_coefficient,
+    cloud_reduced_liquid_kgm2, cloud_specific_attenuation_coefficient, dn1, dn65,
+    dry_term_radio_refractivity, fit_rain_attenuation_to_lognormal, gamma_exact_db_per_km,
+    gamma0_approx_db_per_km, gamma0_exact_db_per_km, gammaw_approx_db_per_km,
+    gammaw_exact_db_per_km, gas_attenuation_default, gas_attenuation_default_many_checked,
+    gaseous_attenuation_inclined_path_db, gaseous_attenuation_slant_path_db,
+    gaseous_attenuation_terrestrial_path_db, inter_annual_variability, is_regular_grid,
+    lognormal_approximation_coefficients, map_wet_term_radio_refractivity, nearest_2d_interpolate,
+    radio_refractive_index, rain_attenuation_db, rain_attenuation_probability_percent,
+    rain_cross_polarization_discrimination_db, rain_height_km,
     rain_specific_attenuation_coefficients, rain_specific_attenuation_db_per_km,
     rainfall_probability_percent, rainfall_rate_mmh, rainfall_rate_r001_mmh, risk_of_exceedance,
     saturation_vapour_pressure_hpa, scintillation_attenuation_db, scintillation_sigma_db,
-    slant_inclined_path_equivalent_height_km, standard_pressure_hpa, standard_temperature_k,
-    standard_water_vapour_density_gm3, surface_mean_temperature_k,
-    surface_month_mean_temperature_k, surface_water_vapour_density_gm3, topographic_altitude_km,
-    total_water_vapour_content_kgm2, water_vapour_pressure_hpa, wet_term_radio_refractivity,
-    zenith_water_vapour_attenuation_db, zero_isotherm_height_km,
+    site_diversity_rain_outage_probability_percent, slant_inclined_path_equivalent_height_km,
+    standard_pressure_hpa, standard_temperature_k, standard_water_vapour_density_gm3,
+    surface_mean_temperature_k, surface_month_mean_temperature_k, surface_water_vapour_density_gm3,
+    topographic_altitude_km, total_water_vapour_content_kgm2, water_vapour_pressure_hpa,
+    wet_term_radio_refractivity, zenith_water_vapour_attenuation_db, zero_isotherm_height_km,
 };
+use ndarray::array;
 use std::path::Path;
 
 fn data_available() -> bool {
@@ -154,6 +159,31 @@ fn direct_lookup_wrappers_return_finite_values() {
         gamma0_exact_db_per_km(12.0, 1008.0, 7.5, 289.2).unwrap(),
         gammaw_exact_db_per_km(12.0, 1008.0, 7.5, 289.2).unwrap(),
         gamma_exact_db_per_km(12.0, 1008.0, 7.5, 289.2).unwrap(),
+        gamma0_approx_db_per_km(12.0, 1008.0, 7.5, 289.2).unwrap(),
+        gammaw_approx_db_per_km(12.0, 1008.0, 7.5, 289.2).unwrap(),
+        gaseous_attenuation_terrestrial_path_db(
+            10.0,
+            12.0,
+            30.0,
+            7.5,
+            1008.0,
+            289.2,
+            GasPathMode::Approximate,
+        )
+        .unwrap(),
+        gaseous_attenuation_inclined_path_db(
+            12.0,
+            30.0,
+            7.5,
+            1008.0,
+            289.2,
+            0.4,
+            2.0,
+            GasPathMode::Approximate,
+        )
+        .unwrap(),
+        rain_attenuation_probability_percent(lat, lon, 30.0, Some(0.4), None, None).unwrap(),
+        rain_cross_polarization_discrimination_db(10.0, 12.0, 30.0, 0.1, 45.0).unwrap(),
         zenith_water_vapour_attenuation_db(12.0, 22.5, h_km).unwrap(),
     ];
 
@@ -170,6 +200,28 @@ fn direct_lookup_wrappers_return_finite_values() {
     let (_m, sigma, pclw) = lognormal_approximation_coefficients(lat, lon).unwrap();
     assert!(sigma.is_finite());
     assert!(pclw.is_finite());
+
+    let (rain_sigma, rain_mean) =
+        fit_rain_attenuation_to_lognormal(lat, lon, 12.0, 30.0, 0.4, 10.0, 45.0).unwrap();
+    assert!(rain_sigma.is_finite());
+    assert!(rain_mean.is_finite());
+
+    let diversity = site_diversity_rain_outage_probability_percent(
+        lat,
+        lon,
+        5.0,
+        30.0,
+        lat + 0.2,
+        lon + 0.3,
+        5.0,
+        30.0,
+        12.0,
+        45.0,
+        Some(0.4),
+        Some(0.4),
+    )
+    .unwrap();
+    assert!(diversity >= 0.0);
 }
 
 fn unavailability_from_rainfall_rate_percent_for_test(lat: f64, lon: f64, rain: f64) -> f64 {
@@ -312,5 +364,54 @@ fn direct_wrapper_invalid_inputs_are_rejected() {
     assert_eq!(
         err.message(),
         "temp_c, humidity_percent, and pressure_hpa must be supplied together"
+    );
+
+    let err = gaseous_attenuation_inclined_path_db(
+        12.0,
+        30.0,
+        7.5,
+        1008.0,
+        289.2,
+        0.4,
+        12.0,
+        GasPathMode::Approximate,
+    )
+    .unwrap_err();
+    assert_eq!(
+        err.message(),
+        "h1_km and h2_km must be <= 10 for P.676 inclined paths"
+    );
+}
+
+#[test]
+fn p1144_regular_grid_helpers_work() {
+    let lat = array![[1.0, 1.0], [0.0, 0.0]];
+    let lon = array![[0.0, 1.0], [0.0, 1.0]];
+    let values = array![[10.0, 11.0], [0.0, 1.0]];
+
+    assert!(is_regular_grid(&lat, &lon).unwrap());
+    assert_eq!(
+        nearest_2d_interpolate(&lat, &lon, &values, 0.2, 0.2).unwrap(),
+        0.0
+    );
+    assert!((bilinear_2d_interpolate(&lat, &lon, &values, 0.5, 0.5).unwrap() - 5.5).abs() < 1e-12);
+
+    let lat = array![
+        [3.0, 3.0, 3.0, 3.0],
+        [2.0, 2.0, 2.0, 2.0],
+        [1.0, 1.0, 1.0, 1.0],
+        [0.0, 0.0, 0.0, 0.0],
+    ];
+    let lon = array![
+        [0.0, 1.0, 2.0, 3.0],
+        [0.0, 1.0, 2.0, 3.0],
+        [0.0, 1.0, 2.0, 3.0],
+        [0.0, 1.0, 2.0, 3.0],
+    ];
+    let values = &lat * 10.0 + &lon;
+    assert!(
+        bicubic_2d_interpolate(&lat, &lon, &values, 1.5, 1.5)
+            .unwrap()
+            .is_finite()
     );
 }
