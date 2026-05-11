@@ -7,6 +7,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+No user-facing changes yet.
+
+## [1.2.0] - 2026-05-11
+
 ### Added
 
 - Added a Python package, published as `itu-rs` and imported as `itu_rs`, backed
@@ -17,11 +21,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   `HydrometeorType`.
 - Added Python wheels that embed the ITU-R data grids, so Python users do not
   need `ITU_RS_DATA_DIR` for normal installs.
-
-## [1.2.0] - 2026-05-11
-
-### Added
-
 - Added `HydrometeorType` for selecting water or ice saturation-vapour pressure calculations.
 - Added monthly P.1510 temperature lookup through `surface_month_mean_temperature_k`.
 - Added P.837 rain-occurrence and arbitrary-percent rain-rate APIs:
