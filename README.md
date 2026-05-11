@@ -11,6 +11,7 @@ atmospheric propagation routines, ported from
 [`python-itu-r`](https://github.com/inigodelportillo/ITU-Rpy) for Earth-space slant-path attenuation
 calculations that run 30-50x faster than the Python implementation in benchmarked workloads.
 
+- [API](#api)
 - [Data Files](#data-files)
   - [Automatic Data Download](#automatic-data-download)
   - [Git Repo Checkout](#git-repo-checkout)
@@ -19,8 +20,37 @@ calculations that run 30-50x faster than the Python implementation in benchmarke
 - [Example](#example)
 - [Supported Coverage](#supported-coverage)
 - [Benchmarks](#benchmarks)
-- [API](#api)
 - [Attribution](#attribution)
+
+## API
+
+The primary public calls are:
+
+| Function | Purpose |
+|---|---|
+| `atmospheric_attenuation_slant_path` | Compute gas, cloud, rain, scintillation, and total attenuation for one elevation angle. |
+| `atmospheric_attenuation_slant_path_many` | Compute the same contribution set for many elevation angles. |
+| `gas_attenuation_default` | Compute gas-only default attenuation for one elevation angle. |
+| `gas_attenuation_default_many` | Compute gas-only default attenuation for many elevation angles. |
+| `gas_attenuation_default_many_checked` | Compatibility alias for strict gas-only batch validation. |
+
+Additional scalar APIs expose the implemented recommendation pieces directly:
+
+| Recommendation | Public functions |
+|---|---|
+| [P.1510](https://www.itu.int/rec/R-REC-P.1510)/[P.1511](https://www.itu.int/rec/R-REC-P.1511) | `surface_mean_temperature_k`, `surface_month_mean_temperature_k`, `topographic_altitude_km` |
+| [P.835](https://www.itu.int/rec/R-REC-P.835) | `standard_temperature_k`, `standard_pressure_hpa`, `standard_water_vapour_density_gm3` |
+| [P.836](https://www.itu.int/rec/R-REC-P.836)/[P.837](https://www.itu.int/rec/R-REC-P.837)/[P.839](https://www.itu.int/rec/R-REC-P.839) | `surface_water_vapour_density_gm3`, `total_water_vapour_content_kgm2`, `rainfall_probability_percent`, `rainfall_rate_r001_mmh`, `rainfall_rate_mmh`, `unavailability_from_rainfall_rate_percent`, `zero_isotherm_height_km`, `rain_height_km` |
+| [P.838](https://www.itu.int/rec/R-REC-P.838) | `rain_specific_attenuation_coefficients`, `rain_specific_attenuation_db_per_km` |
+| [P.840](https://www.itu.int/rec/R-REC-P.840) | `cloud_reduced_liquid_kgm2`, `cloud_liquid_mass_absorption_coefficient`, `cloud_specific_attenuation_coefficient`, `cloud_attenuation_db`, `lognormal_approximation_coefficients`, `cloud_attenuation_lognormal_db` |
+| [P.453](https://www.itu.int/rec/R-REC-P.453) | `wet_term_radio_refractivity`, `dry_term_radio_refractivity`, `radio_refractive_index`, `water_vapour_pressure_hpa`, `saturation_vapour_pressure_hpa`, `map_wet_term_radio_refractivity`, `dn65`, `dn1` |
+| [P.678](https://www.itu.int/rec/R-REC-P.678) | `inter_annual_variability`, `risk_of_exceedance` |
+| [P.676](https://www.itu.int/rec/R-REC-P.676) | `gamma0_exact_db_per_km`, `gammaw_exact_db_per_km`, `gamma_exact_db_per_km`, `gamma0_approx_db_per_km`, `gammaw_approx_db_per_km`, `slant_inclined_path_equivalent_height_km`, `zenith_water_vapour_attenuation_db`, `gaseous_attenuation_slant_path_db`, `gaseous_attenuation_terrestrial_path_db`, `gaseous_attenuation_inclined_path_db` |
+| [P.618](https://www.itu.int/rec/R-REC-P.618) | `rain_attenuation_db`, `rain_attenuation_probability_percent`, `fit_rain_attenuation_to_lognormal`, `site_diversity_rain_outage_probability_percent`, `rain_cross_polarization_discrimination_db`, `scintillation_sigma_db`, `scintillation_attenuation_db` |
+| [P.1144](https://www.itu.int/rec/R-REC-P.1144) | `is_regular_grid`, `nearest_2d_interpolate`, `bilinear_2d_interpolate`, `bicubic_2d_interpolate` |
+
+`SlantPathOptions::default()` matches the default slant-path configuration used
+by the port. Set `exact = true` to use exact gaseous attenuation.
 
 ## Data Files
 
@@ -235,36 +265,6 @@ Run the Rust-only Criterion benchmarks with:
 ```sh
 cargo bench
 ```
-
-## API
-
-The primary public calls are:
-
-| Function | Purpose |
-|---|---|
-| `atmospheric_attenuation_slant_path` | Compute gas, cloud, rain, scintillation, and total attenuation for one elevation angle. |
-| `atmospheric_attenuation_slant_path_many` | Compute the same contribution set for many elevation angles. |
-| `gas_attenuation_default` | Compute gas-only default attenuation for one elevation angle. |
-| `gas_attenuation_default_many` | Compute gas-only default attenuation for many elevation angles. |
-| `gas_attenuation_default_many_checked` | Compatibility alias for strict gas-only batch validation. |
-
-Additional scalar APIs expose the implemented recommendation pieces directly:
-
-| Recommendation | Public functions |
-|---|---|
-| [P.1510](https://www.itu.int/rec/R-REC-P.1510)/[P.1511](https://www.itu.int/rec/R-REC-P.1511) | `surface_mean_temperature_k`, `surface_month_mean_temperature_k`, `topographic_altitude_km` |
-| [P.835](https://www.itu.int/rec/R-REC-P.835) | `standard_temperature_k`, `standard_pressure_hpa`, `standard_water_vapour_density_gm3` |
-| [P.836](https://www.itu.int/rec/R-REC-P.836)/[P.837](https://www.itu.int/rec/R-REC-P.837)/[P.839](https://www.itu.int/rec/R-REC-P.839) | `surface_water_vapour_density_gm3`, `total_water_vapour_content_kgm2`, `rainfall_probability_percent`, `rainfall_rate_r001_mmh`, `rainfall_rate_mmh`, `unavailability_from_rainfall_rate_percent`, `zero_isotherm_height_km`, `rain_height_km` |
-| [P.838](https://www.itu.int/rec/R-REC-P.838) | `rain_specific_attenuation_coefficients`, `rain_specific_attenuation_db_per_km` |
-| [P.840](https://www.itu.int/rec/R-REC-P.840) | `cloud_reduced_liquid_kgm2`, `cloud_liquid_mass_absorption_coefficient`, `cloud_specific_attenuation_coefficient`, `cloud_attenuation_db`, `lognormal_approximation_coefficients`, `cloud_attenuation_lognormal_db` |
-| [P.453](https://www.itu.int/rec/R-REC-P.453) | `wet_term_radio_refractivity`, `dry_term_radio_refractivity`, `radio_refractive_index`, `water_vapour_pressure_hpa`, `saturation_vapour_pressure_hpa`, `map_wet_term_radio_refractivity`, `dn65`, `dn1` |
-| [P.678](https://www.itu.int/rec/R-REC-P.678) | `inter_annual_variability`, `risk_of_exceedance` |
-| [P.676](https://www.itu.int/rec/R-REC-P.676) | `gamma0_exact_db_per_km`, `gammaw_exact_db_per_km`, `gamma_exact_db_per_km`, `gamma0_approx_db_per_km`, `gammaw_approx_db_per_km`, `slant_inclined_path_equivalent_height_km`, `zenith_water_vapour_attenuation_db`, `gaseous_attenuation_slant_path_db`, `gaseous_attenuation_terrestrial_path_db`, `gaseous_attenuation_inclined_path_db` |
-| [P.618](https://www.itu.int/rec/R-REC-P.618) | `rain_attenuation_db`, `rain_attenuation_probability_percent`, `fit_rain_attenuation_to_lognormal`, `site_diversity_rain_outage_probability_percent`, `rain_cross_polarization_discrimination_db`, `scintillation_sigma_db`, `scintillation_attenuation_db` |
-| [P.1144](https://www.itu.int/rec/R-REC-P.1144) | `is_regular_grid`, `nearest_2d_interpolate`, `bilinear_2d_interpolate`, `bicubic_2d_interpolate` |
-
-`SlantPathOptions::default()` matches the default slant-path configuration used
-by the port. Set `exact = true` to use exact gaseous attenuation.
 
 ## Attribution
 
