@@ -11,8 +11,6 @@ atmospheric propagation routines, ported from
 [`python-itu-r`](https://github.com/inigodelportillo/ITU-Rpy) for Earth-space slant-path attenuation
 calculations that run 30-50x faster than the Python implementation in benchmarked workloads.
 
-## Table of Contents
-
 - [Data Files](#data-files)
   - [Automatic Data Download](#automatic-data-download)
   - [Git Repo Checkout](#git-repo-checkout)
