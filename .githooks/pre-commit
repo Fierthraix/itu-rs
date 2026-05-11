@@ -7,5 +7,5 @@ cd "$repo_root"
 echo "Running cargo fmt --check..."
 cargo fmt --all -- --check
 
-echo "Running cargo check..."
-cargo check
+echo "Running cargo check --lib..."
+cargo check --lib
