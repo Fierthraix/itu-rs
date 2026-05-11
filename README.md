@@ -1,5 +1,11 @@
 # itu-rs
 
+[![CI](https://github.com/Fierthraix/itu-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/Fierthraix/itu-rs/actions/workflows/ci.yml)
+[![Crates.io](https://img.shields.io/crates/v/itu-rs.svg)](https://crates.io/crates/itu-rs)
+[![Downloads](https://img.shields.io/crates/d/itu-rs.svg)](https://crates.io/crates/itu-rs)
+[![Docs.rs](https://docs.rs/itu-rs/badge.svg)](https://docs.rs/itu-rs)
+[![License](https://img.shields.io/crates/l/itu-rs.svg)](LICENSE)
+
 `itu-rs` is a Rust implementation of selected [ITU-R P-series](https://www.itu.int/rec/R-REC-p)
 atmospheric propagation routines, ported from
 [`python-itu-r`](https://github.com/inigodelportillo/ITU-Rpy) for fast Earth-space slant-path attenuation
