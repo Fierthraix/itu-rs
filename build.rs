@@ -113,7 +113,11 @@ fn verify_archive(path: &Path) {
             path.display()
         )
     });
-    let actual = format!("{:x}", Sha256::digest(&bytes));
+    let digest = Sha256::digest(&bytes);
+    let actual = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
     assert_eq!(
         actual,
         expected.to_ascii_lowercase(),
