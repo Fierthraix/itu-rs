@@ -9,10 +9,10 @@ use std::path::{Path, PathBuf};
 
 #[cfg(feature = "data")]
 const DEFAULT_DATA_URL: &str =
-    "https://github.com/Fierthraix/itu-rs/releases/download/itu-rs-data-v1/itu-rs-data-v1.zip";
+    "https://github.com/Fierthraix/itu-rs/releases/download/itu-rs-data-v2/itu-rs-data-v2.zip";
 #[cfg(feature = "data")]
 const DEFAULT_DATA_SHA256: &str =
-    "20436b31774260950032328e18630dbfe3d13a2d679fd1de5edad54bf153a294";
+    "f818af57daeb839e42ca5d45cac2fc838f5abe9c3a9303609cf9d79497eba7d6";
 
 fn main() {
     println!("cargo:rerun-if-env-changed=ITU_RS_DATA_ARCHIVE");
