@@ -5,12 +5,11 @@ use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyAny;
 
-use ndarray::Array2;
 use itu_rs_core::{
-    GasPathMode as CoreGasPathMode,
-    HydrometeorType as CoreHydrometeorType, SlantPathContributions as CoreSlantPathContributions,
-    SlantPathOptions as CoreSlantPathOptions,
+    GasPathMode as CoreGasPathMode, HydrometeorType as CoreHydrometeorType,
+    SlantPathContributions as CoreSlantPathContributions, SlantPathOptions as CoreSlantPathOptions,
 };
+use ndarray::Array2;
 
 create_exception!(_native, PyItuError, PyException);
 
