@@ -1,1 +1,8 @@
 /target/
+/python/.pytest_cache/
+/python/.venv/
+/python/dist/
+/python/dist-sdist/
+/python/python/itu_rs/*.pyd
+/python/python/itu_rs/*.so
+/python/target/

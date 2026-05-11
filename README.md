@@ -17,6 +17,7 @@ calculations that run 30-50x faster than the Python implementation in benchmarke
   - [Automatic Data Download](#automatic-data-download)
   - [Git Repo Checkout](#git-repo-checkout)
   - [Manual Data Directory](#manual-data-directory)
+- [Python Package](#python-package)
 - [Example](#example)
 - [Supported Coverage](#supported-coverage)
 - [Benchmarks](#benchmarks)
@@ -61,6 +62,44 @@ Windows PowerShell:
 
 ```powershell
 $env:ITU_RS_DATA_DIR = "C:\path\to\ITU-Rpy\itur\data"
+```
+
+## Python Package
+
+`itu-rs` is also available as an optional Python package backed by the same Rust
+implementation:
+
+```sh
+uv add itu-rs
+# or: pip install itu-rs
+```
+
+Python imports use an underscore because Python module names cannot contain
+hyphens:
+
+```python
+import itu_rs
+
+attenuation = itu_rs.atmospheric_attenuation_slant_path(
+    45.4215,
+    -75.6972,
+    12.0,
+    30.0,
+    0.1,
+    1.2,
+)
+
+print(f"{attenuation.total_db:.6f} dB")
+```
+
+Published wheels embed the ITU-R data grids, so normal Python installs do not
+require `ITU_RS_DATA_DIR`.
+
+For local Python binding development, use `uv`:
+
+```sh
+uv run --project python --group dev maturin develop --manifest-path python/Cargo.toml
+uv run --project python --group dev pytest python/tests
 ```
 
 ## Example

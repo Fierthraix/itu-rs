@@ -1,0 +1,121 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  cargo-publish:
+    name: Publish crates.io
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish Rust crate
+        run: cargo publish --token "$CARGO_REGISTRY_TOKEN"
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  python-wheels:
+    name: Build Python wheels
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.9
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --manifest-path python/Cargo.toml --out dist
+          manylinux: auto
+          sccache: true
+
+      - name: Test wheel
+        shell: bash
+        run: |
+          wheel="$(find dist -name '*.whl' | head -n 1)"
+          uv run --python 3.9 --with pytest --with "$wheel" python -m pytest python/tests
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: dist
+
+  python-sdist:
+    name: Build Python sdist
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.9
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build sdist
+        run: uv run --project python --group dev maturin sdist --manifest-path python/Cargo.toml --out dist
+
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist
+
+  pypi-publish:
+    name: Publish PyPI
+    runs-on: ubuntu-latest
+    needs:
+      - cargo-publish
+      - python-wheels
+      - python-sdist
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.9
+
+      - name: Publish Python package
+        run: uv run --python 3.9 --with "maturin>=1.8,<2" maturin upload --username __token__ --password "$PYPI_API_TOKEN" dist/*
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}

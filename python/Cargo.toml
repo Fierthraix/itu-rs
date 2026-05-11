@@ -1,0 +1,16 @@
+[package]
+name = "itu-rs-python"
+version = "1.2.0"
+edition = "2024"
+description = "Python bindings for selected ITU-R P-series atmospheric propagation models"
+repository = "https://github.com/Fierthraix/itu-rs"
+license = "MIT"
+publish = false
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+itu_rs_core = { package = "itu-rs", path = "..", version = "1.2.0", features = ["data"] }
+pyo3 = { version = "0.27.1", features = ["abi3-py39", "extension-module"] }

@@ -5,6 +5,19 @@ All notable user-facing changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Added a Python package, published as `itu-rs` and imported as `itu_rs`, backed
+  by the same Rust implementation.
+- Added Python bindings for the public Rust APIs, including slant-path,
+  gas-only, scalar recommendation, and atmospheric helper functions.
+- Added Python classes for `SlantPathOptions`, `SlantPathContributions`, and
+  `HydrometeorType`.
+- Added Python wheels that embed the ITU-R data grids, so Python users do not
+  need `ITU_RS_DATA_DIR` for normal installs.
+
 ## [1.2.0] - 2026-05-11
 
 ### Added

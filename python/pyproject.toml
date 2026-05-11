@@ -1,0 +1,48 @@
+[build-system]
+requires = ["maturin>=1.8,<2"]
+build-backend = "maturin"
+
+[project]
+name = "itu-rs"
+version = "1.2.0"
+description = "Python bindings for selected ITU-R P-series atmospheric propagation models"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+authors = [{ name = "Fierthraix" }]
+keywords = ["itu-r", "propagation", "attenuation", "rf", "satellite"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering",
+]
+
+[project.urls]
+Homepage = "https://github.com/Fierthraix/itu-rs"
+Repository = "https://github.com/Fierthraix/itu-rs"
+Documentation = "https://docs.rs/itu-rs"
+Changelog = "https://github.com/Fierthraix/itu-rs/blob/master/CHANGELOG.md"
+
+[tool.maturin]
+bindings = "pyo3"
+module-name = "itu_rs._native"
+python-source = "python"
+include = [
+    "python/itu_rs/__init__.py",
+    "python/itu_rs/__init__.pyi",
+    "python/itu_rs/py.typed",
+]
+
+[dependency-groups]
+dev = [
+    "maturin>=1.8,<2",
+    "pytest>=8",
+]

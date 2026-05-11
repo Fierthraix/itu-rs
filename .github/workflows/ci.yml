@@ -61,3 +61,54 @@ jobs:
 
       - name: Build release with all features
         run: cargo build --release --all-features
+
+  python:
+    name: Python wheel (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.9
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Check Python binding format
+        run: cargo fmt --manifest-path python/Cargo.toml --check
+
+      - name: Check Python binding
+        run: cargo check --manifest-path python/Cargo.toml
+
+      - name: Lint Python binding
+        run: cargo clippy --manifest-path python/Cargo.toml -- -D warnings
+
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --manifest-path python/Cargo.toml --out dist
+          manylinux: auto
+          sccache: true
+
+      - name: Test Python wheel
+        shell: bash
+        run: |
+          wheel="$(find dist -name '*.whl' | head -n 1)"
+          uv run --python 3.9 --with pytest --with "$wheel" python -m pytest python/tests
